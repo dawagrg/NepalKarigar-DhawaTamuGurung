@@ -1,31 +1,60 @@
-from rest_framework import generics
-from .models import KarigarProfile
-from .serializers import RegisterSerializer, KarigarProfileSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import User
-from .serializers import RegisterSerializer
-from rest_framework.permissions import AllowAny
+from django.contrib.auth import get_user_model, authenticate
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
 
-class RegisterView(generics.CreateAPIView):
-    serializer_class = RegisterSerializer
+User = get_user_model()
 
 
-class KarigarListView(generics.ListAPIView):
-    queryset = KarigarProfile.objects.all()
-    serializer_class = KarigarProfileSerializer
+@api_view(["POST"])
+def register_user(request):
+    username = request.data.get("username")
+    password = request.data.get("password")
+
+    if not username or not password:
+        return Response(
+            {"error": "Username and password are required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if User.objects.filter(username=username).exists():
+        return Response(
+            {"error": "User already exists"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    user = User.objects.create_user(
+        username=username,
+        password=password
+    )
+
+    return Response(
+        {
+            "message": "User registered successfully",
+            "user_id": user.id
+        },
+        status=status.HTTP_201_CREATED
+    )
 
 
-class KarigarBySkillView(generics.ListAPIView):
-    serializer_class = KarigarProfileSerializer
+@api_view(["POST"])
+def login_user(request):
 
-    def get_queryset(self):
-        skill = self.kwargs["skill"]
-        return KarigarProfile.objects.filter(skill__icontains=skill)
-    
-class LoginView(TokenObtainPairView):
-    pass
+    username = request.data.get("username")
+    password = request.data.get("password")
 
-class RegisterView(generics.CreateAPIView):
-    queryset = User.objects.all()
-    serializer_class = RegisterSerializer
-    permission_classes = [AllowAny]
+    user = authenticate(username=username, password=password)
+
+    if user is None:
+        return Response(
+            {"error": "Invalid credentials"},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    return Response(
+        {
+            "message": "Login successful",
+            "user_id": user.id,
+            "username": user.username
+        }
+    )
