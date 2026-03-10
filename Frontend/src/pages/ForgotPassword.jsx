@@ -1,126 +1,260 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { forgotPassword } from "../services/api";
+import { IPhone, IKey, ILock, IEye, IEyeOff, ICopy, ICheck, ICheckCirc, IAlertCirc, IClock, IWrench } from "./Icons";
+import { forgotPassword, resetPassword } from "../services/api";
 
 export default function ForgotPassword() {
-  const [identifier, setId] = useState("");
-  const [loading, setLoad]  = useState(false);
-  const [error, setError]   = useState("");
-  const [result, setResult] = useState(null);
-  const [focused, setFocus] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [step,       setStep]   = useState(1);
+  const [identifier, setId]     = useState("");
+  const [token,      setToken]  = useState("");       // returned by API (dev mode)
+  const [tokenPaste, setTPaste] = useState("");       // user-pasted (prod mode)
+  const [pw,         setPw]     = useState({ new_password: "", confirm_password: "" });
+  const [showPw,     setShowPw] = useState(false);
+  const [loading,    setLoad]   = useState(false);
+  const [error,      setErr]    = useState("");
+  const [copied,     setCopied] = useState(false);
 
-  const submit = async e => {
-    e.preventDefault();
-    if (!identifier.trim()) { setError("Please enter your phone number or email."); return; }
-    setLoad(true); setError("");
+  /* Step 1 — request token */
+  const sendToken = async () => {
+    if (!identifier.trim()) { setErr("Please enter your phone number or email."); return; }
+    setLoad(true); setErr("");
     try {
-      const res = await forgotPassword({ identifier });
-      setResult(res.data);
-    } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong. Please try again.");
+      const res = await forgotPassword({ identifier: identifier.trim() });
+      setToken(res.data.reset_token || "");
+      setStep(2);
+    } catch (e) {
+      setErr(e.response?.data?.error || "No account found with that identifier.");
     } finally { setLoad(false); }
   };
 
-  const copy = () => {
-    if (result?.reset_token) {
-      navigator.clipboard.writeText(result.reset_token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  /* Step 2 — set new password */
+  const setNewPw = async () => {
+    const usedToken = token || tokenPaste.trim();
+    if (!usedToken)                          { setErr("Please enter your reset token."); return; }
+    if (!pw.new_password)                    { setErr("Please enter a new password."); return; }
+    if (pw.new_password.length < 8)          { setErr("Password must be at least 8 characters."); return; }
+    if (pw.new_password !== pw.confirm_password) { setErr("Passwords do not match."); return; }
+    setLoad(true); setErr("");
+    try {
+      await resetPassword({ reset_token: usedToken, new_password: pw.new_password, confirm_password: pw.confirm_password });
+      setStep(3);
+    } catch (e) {
+      setErr(e.response?.data?.error || "Invalid or expired token. Please request a new one.");
+    } finally { setLoad(false); }
   };
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 24px", fontFamily: "'Plus Jakarta Sans', sans-serif", position: "relative" }}>
+  const copyToken = () => {
+    navigator.clipboard.writeText(token);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  };
 
-      {/* Subtle bg blobs */}
-      <div className="blob" style={{ width: 500, height: 500, background: "rgba(79,70,229,0.07)", top: "5%", right: "5%", position: "fixed" }} />
-      <div className="blob" style={{ width: 350, height: 350, background: "rgba(124,58,237,0.05)", bottom: "10%", left: "5%", position: "fixed" }} />
-      <div className="dot-bg" style={{ position: "fixed", inset: 0, opacity: 0.35 }} />
+  const len    = pw.new_password.length;
+  const str    = len === 0 ? 0 : len < 6 ? 1 : len < 10 ? 2 : len < 14 ? 3 : 4;
+  const strClr = ["","#DC2626","#D97706","#16A34A","#2563EB"][str];
+  const strTxt = ["","Weak","Fair","Good","Strong"][str];
 
-      <div style={{ width: "100%", maxWidth: 460, position: "relative", zIndex: 1 }}>
-
-        {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 48 }}>
-          <div style={{ width: 40, height: 40, background: "linear-gradient(135deg, #4F46E5, #7C3AED)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 13, color: "white", boxShadow: "0 4px 14px rgba(79,70,229,0.3)" }}>NK</div>
-          <span style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 19, color: "#0F172A" }}>Nepal<span style={{ color: "#4F46E5" }}>Karigar</span></span>
+  /* Step progress dots */
+  const Steps = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 22 }}>
+      {[1,2,3].map((s, i) => (
+        <div key={s} style={{ display: "flex", alignItems: "center", flex: s < 3 ? 1 : "none" }}>
+          <div style={{
+            width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 12, fontWeight: 600, transition: "all .25s",
+            background: step >= s ? "var(--primary)" : "var(--bg-card)",
+            border: `1.5px solid ${step >= s ? "var(--primary)" : "var(--border)"}`,
+            color: step >= s ? "#fff" : "var(--text-p)",
+          }}>
+            {step > s ? <ICheck size={11} color="#fff" w={2.5} /> : s}
+          </div>
+          {s < 3 && (
+            <div style={{ flex: 1, height: 2, margin: "0 4px", transition: "background .3s",
+              background: step > s ? "var(--primary)" : "var(--border)" }} />
+          )}
         </div>
+      ))}
+    </div>
+  );
 
-        {/* Card */}
-        <div className="card" style={{ padding: "40px 36px", borderRadius: 24 }}>
+  return (
+    <div className="auth-page">
 
-          {!result ? (
-            <div className="fade-up d1">
-              {/* Icon */}
-              <div style={{ width: 64, height: 64, borderRadius: 18, background: "#EEF2FF", border: "1px solid #C7D2FE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 28 }}>🔑</div>
+      {/* Logo */}
+      <div className="auth-logo">
+        <div className="auth-logo-icon"><IWrench size={18} color="#fff" /></div>
+        <span className="auth-logo-name">NepalKarigar</span>
+      </div>
 
-              <h1 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 30, color: "#0F172A", marginBottom: 8, letterSpacing: "-0.5px" }}>Forgot password?</h1>
-              <p style={{ color: "#64748B", fontSize: 15, lineHeight: 1.7, marginBottom: 32 }}>
-                No worries — enter your registered phone number or email and we'll generate a secure reset token.
-              </p>
+      {/* Card */}
+      <div className="auth-card fu">
+        <Steps />
 
-              {error && (
-                <div className="fade-in" style={{ background: "#FFF1F2", border: "1px solid #FECDD3", borderRadius: 12, padding: "13px 18px", marginBottom: 24, color: "#BE123C", fontSize: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <span>⚠</span><span>{error}</span>
+        {/* ── STEP 1 ── */}
+        {step === 1 && (
+          <>
+            <h1 className="auth-title">Forgot password?</h1>
+            <p className="auth-sub">Enter the phone number or email on your account.</p>
+
+            {error && (
+              <div className="alert alert-err" style={{ marginBottom: 16 }}>
+                <IAlertCirc size={15} style={{ flexShrink: 0, marginTop: 1 }} /><span>{error}</span>
+              </div>
+            )}
+
+            <div className="form-stack">
+              <div>
+                <label className="lbl">Phone number or email address</label>
+                <div className="input-wrap">
+                  <span className="input-icon-l"><IPhone size={15} /></span>
+                  <input type="text" className="field pl"
+                    placeholder="98XXXXXXXX  or  you@email.com"
+                    value={identifier}
+                    onChange={e => { setId(e.target.value); setErr(""); }}
+                    onKeyDown={e => e.key === "Enter" && sendToken()}
+                  />
+                </div>
+              </div>
+              <button className="btn btn-primary btn-lg btn-full" onClick={sendToken} disabled={loading}>
+                {loading ? <><div className="spin" />Sending…</> : "Send Reset Token"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── STEP 2 ── */}
+        {step === 2 && (
+          <>
+            <h1 className="auth-title">Create new password</h1>
+            <p className="auth-sub">
+              {token ? "Your reset token is shown below." : "Paste your reset token, then choose a new password."}
+            </p>
+
+            {/* Token box (shown when API returned token) */}
+            {token && (
+              <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-s)", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 4 }}>
+                    <IKey size={11} /> Reset Token
+                  </span>
+                  <button onClick={copyToken} className="btn btn-outline btn-sm"
+                    style={{ fontSize: 12, color: copied ? "#16A34A" : undefined, borderColor: copied ? "#BBF7D0" : undefined, background: copied ? "#F0FDF4" : undefined }}>
+                    {copied ? <><ICheck size={12} color="#16A34A" />Copied</> : <><ICopy size={12} />Copy</>}
+                  </button>
+                </div>
+                <code style={{ fontSize: 11, color: "var(--primary)", wordBreak: "break-all", lineHeight: 1.6, display: "block" }}>{token}</code>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 7, fontSize: 11, color: "var(--text-p)" }}>
+                  <IClock size={11} /> Expires in 1 hour
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="alert alert-err" style={{ marginBottom: 16 }}>
+                <IAlertCirc size={15} style={{ flexShrink: 0, marginTop: 1 }} /><span>{error}</span>
+              </div>
+            )}
+
+            <div className="form-stack">
+
+              {/* Paste token (only if API didn't return one) */}
+              {!token && (
+                <div>
+                  <label className="lbl">Reset Token</label>
+                  <div className="input-wrap">
+                    <span className="input-icon-l"><IKey size={15} /></span>
+                    <input type="text" className="field pl"
+                      placeholder="Paste token here"
+                      value={tokenPaste}
+                      onChange={e => { setTPaste(e.target.value); setErr(""); }}
+                      style={{ fontFamily: "monospace", fontSize: 12 }}
+                    />
+                  </div>
                 </div>
               )}
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748B", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Phone or Email</label>
-                  <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", left: 15, top: "50%", transform: "translateY(-50%)", fontSize: 16, color: "#94A3B8" }}>📱</span>
-                    <input type="text" placeholder="98XXXXXXXX or you@email.com" value={identifier}
-                      onChange={e => { setId(e.target.value); setError(""); }}
-                      onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-                      className={`nk-input${focused ? " focused" : ""}`} style={{ paddingLeft: 44 }} />
-                  </div>
+              {/* New password */}
+              <div>
+                <label className="lbl">New Password</label>
+                <div className="input-wrap">
+                  <span className="input-icon-l"><ILock size={15} /></span>
+                  <input type={showPw ? "text" : "password"} className="field pl pr"
+                    placeholder="Minimum 8 characters"
+                    value={pw.new_password}
+                    onChange={e => { setPw(p => ({ ...p, new_password: e.target.value })); setErr(""); }}
+                  />
+                  <button type="button" className="input-icon-r"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-p)" }}
+                    onClick={() => setShowPw(s => !s)}>
+                    {showPw ? <IEyeOff size={15} /> : <IEye size={15} />}
+                  </button>
                 </div>
+                {pw.new_password && (
+                  <>
+                    <div className="pw-bars">
+                      {[1,2,3,4].map(i => <div key={i} className="pw-bar" style={{ background: str >= i ? strClr : undefined }} />)}
+                    </div>
+                    <p className="pw-hint" style={{ color: strClr }}>{strTxt} password</p>
+                  </>
+                )}
+              </div>
 
-                <button onClick={submit} disabled={loading} className="btn btn-primary" style={{ width: "100%", padding: "15px", borderRadius: 13, fontSize: 15 }}>
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, position: "relative", zIndex: 1 }}>
-                    {loading ? <><div className="spinner" />Sending…</> : "Send Reset Token →"}
-                  </span>
+              {/* Confirm */}
+              <div>
+                <label className="lbl">Confirm New Password</label>
+                <div className="input-wrap">
+                  <span className="input-icon-l"><ILock size={15} /></span>
+                  <input type="password" className="field pl pr"
+                    placeholder="Re-enter new password"
+                    value={pw.confirm_password}
+                    onChange={e => { setPw(p => ({ ...p, confirm_password: e.target.value })); setErr(""); }}
+                  />
+                  {pw.confirm_password && (
+                    <span className="input-icon-r">
+                      {pw.new_password === pw.confirm_password
+                        ? <ICheckCirc size={15} color="#16A34A" />
+                        : <IAlertCirc size={15} color="#DC2626" />
+                      }
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+                <button className="btn btn-outline btn-md"
+                  onClick={() => { setStep(1); setErr(""); setPw({ new_password:"", confirm_password:"" }); setToken(""); setTPaste(""); }}>
+                  Back
+                </button>
+                <button className="btn btn-primary btn-md" style={{ flex: 1 }} onClick={setNewPw} disabled={loading}>
+                  {loading ? <><div className="spin" />Updating…</> : "Set New Password"}
                 </button>
               </div>
+
             </div>
-          ) : (
-            <div className="fade-up d1">
-              {/* Success icon */}
-              <div style={{ width: 64, height: 64, borderRadius: 18, background: "#F0FDF4", border: "1px solid #A7F3D0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 28 }}>✅</div>
+          </>
+        )}
 
-              <h2 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 28, color: "#0F172A", marginBottom: 10 }}>Token Generated!</h2>
-              <p style={{ color: "#64748B", fontSize: 14, lineHeight: 1.7, marginBottom: 28 }}>{result.message}</p>
-
-              {result.reset_token && (
-                <div style={{ background: "#F8FAFC", border: "1.5px solid #E2E8F0", borderRadius: 16, padding: "20px", marginBottom: 24 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em", textTransform: "uppercase" }}>Reset Token</span>
-                    <button onClick={copy} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px", background: copied ? "#F0FDF4" : "white", border: `1px solid ${copied ? "#A7F3D0" : "#E2E8F0"}`, borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, color: copied ? "#059669" : "#475569", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "all 0.2s" }}>
-                      {copied ? "✓ Copied!" : "📋 Copy"}
-                    </button>
-                  </div>
-                  <code style={{ fontSize: 12, color: "#4F46E5", wordBreak: "break-all", lineHeight: 1.7, display: "block", fontFamily: "monospace" }}>{result.reset_token}</code>
-                  <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 12, display: "flex", alignItems: "center", gap: 5 }}>
-                    <span>⏰</span> Expires in 1 hour
-                  </div>
-                </div>
-              )}
-
-              <Link to="/reset-password" state={{ token: result.reset_token }} className="btn btn-primary" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "15px", borderRadius: 13, color: "white", fontWeight: 700, fontSize: 15, textDecoration: "none" }}>
-                Reset My Password →
-              </Link>
+        {/* ── STEP 3 ── */}
+        {step === 3 && (
+          <div style={{ textAlign: "center", padding: "8px 0" }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--primary-bg)", border: "2px solid var(--primary-bd)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <ICheckCirc size={28} color="var(--primary)" />
             </div>
-          )}
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-h)", marginBottom: 8 }}>Password updated!</h2>
+            <p style={{ fontSize: 13, color: "var(--text-s)", marginBottom: 22 }}>
+              Your password has been changed. You can now sign in.
+            </p>
+            <Link to="/login" className="btn btn-primary btn-lg btn-full" style={{ textDecoration: "none" }}>
+              Go to Sign In
+            </Link>
+          </div>
+        )}
 
-        </div>
-
-        <p style={{ textAlign: "center", marginTop: 24 }}>
-          <Link to="/login" style={{ color: "#94A3B8", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 500 }}>
-            ← Back to Sign In
-          </Link>
-        </p>
       </div>
+
+      <p style={{ marginTop: 18, fontSize: 13 }}>
+        <Link to="/login" style={{ color: "var(--text-s)", textDecoration: "none" }}>← Back to Sign In</Link>
+      </p>
     </div>
   );
 }

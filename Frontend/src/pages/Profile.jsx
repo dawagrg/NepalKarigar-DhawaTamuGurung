@@ -1,21 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  IUser, IPhone, IMail, IMapPin, IFileText, ILock, IEye, IEyeOff,
+  ICamera, ISave, IRefresh, ICheckCirc, IAlertCirc,
+  IHome, IWrench, IShield, ICalendar, IEdit
+} from "./Icons";
 import { getProfile, updateProfile, changePassword } from "../services/api";
 
 export default function Profile() {
-  const navigate  = useNavigate();
-  const fileRef   = useRef();
-  const [tab, setTab]           = useState("info");
-  const [profile, setProfile]   = useState(null);
-  const [loading, setLoad]      = useState(true);
-  const [saving, setSave]       = useState(false);
-  const [focused, setFocus]     = useState("");
-  const [error, setError]       = useState("");
-  const [msg, setMsg]           = useState("");
-  const [preview, setPreview]   = useState(null);
-  const [file, setFile]         = useState(null);
-  const [edit, setEdit]         = useState({ first_name:"", last_name:"", email:"", phone_number:"", bio:"", address:"" });
-  const [pw, setPw]             = useState({ old_password:"", new_password:"", confirm_password:"" });
+  const navigate = useNavigate();
+  const fileRef  = useRef();
+  const [tab,     setTab]     = useState("info");
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoad]    = useState(true);
+  const [saving,  setSave]    = useState(false);
+  const [error,   setErr]     = useState("");
+  const [msg,     setMsg]     = useState("");
+  const [preview, setPreview] = useState(null);
+  const [file,    setFile]    = useState(null);
+  const [showPw,  setShowPw]  = useState({ old: false, nw: false });
+  const [edit,    setEdit]    = useState({ first_name:"", last_name:"", email:"", phone_number:"", bio:"", address:"" });
+  const [pw,      setPw]      = useState({ old_password:"", new_password:"", confirm_password:"" });
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { navigate("/login"); return; }
@@ -27,26 +32,17 @@ export default function Profile() {
       const res = await getProfile();
       const d = res.data;
       setProfile(d);
-      setEdit({ first_name: d.first_name||"", last_name: d.last_name||"", email: d.email||"", phone_number: d.phone_number||"", bio: d.bio||"", address: d.address||"" });
+      setEdit({ first_name:d.first_name||"", last_name:d.last_name||"", email:d.email||"", phone_number:d.phone_number||"", bio:d.bio||"", address:d.address||"" });
       if (d.role) localStorage.setItem("role", d.role);
     } catch { navigate("/login"); }
     finally { setLoad(false); }
   };
 
-  const role      = profile?.role || "customer";
-  const isK       = role === "karigar";
-  const accent    = isK ? "#E11D48" : "#4F46E5";
-  const accentLt  = isK ? "#FFF1F2" : "#EEF2FF";
-  const accentBdr = isK ? "#FECDD3" : "#C7D2FE";
-  const accentGrd = isK ? "linear-gradient(135deg, #E11D48, #9F1239)" : "linear-gradient(135deg, #4F46E5, #7C3AED)";
-  const accentShd = isK ? "rgba(225,29,72,0.25)" : "rgba(79,70,229,0.25)";
-  const roleLabel = isK ? "🔧 Karigar" : "🏠 Customer";
-  const pillCls   = isK ? "pill-rose" : "pill-indigo";
-  const btnCls    = isK ? "btn btn-rose" : "btn btn-primary";
-  const focusCls  = (name) => `nk-input${isK ? " rk" : ""}${focused === name ? " focused" : ""}`;
+  const isK       = (profile?.role||"customer") === "karigar";
+  const roleLabel = isK ? "Worker" : "Customer";
 
   const saveProfile = async () => {
-    setSave(true); setError(""); setMsg("");
+    setSave(true); setErr(""); setMsg("");
     try {
       const fd = new FormData();
       Object.entries(edit).forEach(([k,v]) => fd.append(k, v));
@@ -54,36 +50,36 @@ export default function Profile() {
       const res = await updateProfile(fd);
       setProfile(res.data);
       localStorage.setItem("username", res.data.username);
-      setMsg("Profile saved successfully ✓");
+      setMsg("Profile saved successfully.");
       setFile(null); setPreview(null);
-    } catch (err) { setError(err.response?.data?.error || "Failed to update."); }
+    } catch (e) { setErr(e.response?.data?.error || "Failed to update profile."); }
     finally { setSave(false); }
   };
 
   const savePw = async () => {
-    if (!pw.old_password || !pw.new_password || !pw.confirm_password) { setError("All fields are required."); return; }
-    if (pw.new_password !== pw.confirm_password) { setError("Passwords do not match."); return; }
-    if (pw.new_password.length < 8) { setError("Min. 8 characters."); return; }
-    setSave(true); setError(""); setMsg("");
+    if (!pw.old_password||!pw.new_password||!pw.confirm_password) { setErr("All fields are required."); return; }
+    if (pw.new_password !== pw.confirm_password) { setErr("New passwords do not match."); return; }
+    if (pw.new_password.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    setSave(true); setErr(""); setMsg("");
     try {
       const res = await changePassword(pw);
       if (res.data.access) { localStorage.setItem("access_token", res.data.access); localStorage.setItem("refresh_token", res.data.refresh); }
-      setMsg("Password changed successfully ✓");
+      setMsg("Password changed successfully.");
       setPw({ old_password:"", new_password:"", confirm_password:"" });
-    } catch (err) { setError(err.response?.data?.error || "Failed."); }
+    } catch (e) { setErr(e.response?.data?.error || "Failed to change password."); }
     finally { setSave(false); }
   };
 
-  const pwLen = pw.new_password.length;
-  const str   = pwLen===0 ? 0 : pwLen<6 ? 1 : pwLen<10 ? 2 : pwLen<14 ? 3 : 4;
-  const strC  = ["","#E11D48","#D97706","#059669","#4F46E5"][str];
-  const strLbl= ["","Weak","Fair","Good","Strong"][str];
+  const len    = pw.new_password.length;
+  const str    = len===0?0:len<6?1:len<10?2:len<14?3:4;
+  const strClr = ["","#DC2626","#D97706","#16A34A","#2563EB"][str];
+  const strTxt = ["","Weak","Fair","Good","Strong"][str];
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ width: 40, height: 40, border: "3px solid #E2E8F0", borderTopColor: "#4F46E5", borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 16px" }} />
-        <p style={{ color: "#94A3B8", fontSize: 14 }}>Loading profile…</p>
+    <div style={{ minHeight:"100vh", background:"var(--bg-page)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ width:30, height:30, border:"3px solid var(--border)", borderTopColor:"var(--primary)", borderRadius:"50%", animation:"spin .7s linear infinite", margin:"0 auto 10px" }}/>
+        <p style={{ color:"var(--text-p)", fontSize:13 }}>Loading…</p>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
@@ -92,174 +88,211 @@ export default function Profile() {
   const avatarUrl = preview || profile?.profile_image;
   const initials  = (profile?.first_name?.[0] || profile?.username?.[0] || "U").toUpperCase();
 
-  const FLabel = ({ children }) => (
-    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748B", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>{children}</label>
-  );
+  const TABS = [
+    { id:"info",     Icon:IUser, label:"My Info"         },
+    { id:"edit",     Icon:IEdit, label:"Edit Profile"    },
+    { id:"password", Icon:ILock, label:"Change Password" },
+  ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F8FAFC", paddingTop: 80, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      {/* Soft bg blobs */}
-      <div className="blob" style={{ width: 500, height: 500, background: `${isK ? "rgba(225,29,72,0.04)" : "rgba(79,70,229,0.05)"}`, top: 0, right: 0, position: "fixed" }} />
-      <div className="dot-bg" style={{ position: "fixed", inset: 0, opacity: 0.3 }} />
+    <div style={{ minHeight:"100vh", background:"var(--bg-page)", paddingTop:70 }}>
+      <div style={{ maxWidth:820, margin:"0 auto", padding:"24px 20px" }}>
 
-      <div style={{ maxWidth: 940, margin: "0 auto", padding: "36px 24px", position: "relative", zIndex: 1 }}>
+        {/* Header */}
+        <div className="card" style={{ padding:"20px 22px", marginBottom:14, display:"flex", alignItems:"center", gap:18, flexWrap:"wrap" }}>
+          {/* Avatar */}
+          <div style={{ position:"relative", flexShrink:0 }}>
+            <div style={{ width:66, height:66, borderRadius:"50%", background:avatarUrl?"transparent":"var(--primary)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"2px solid var(--primary-bd)" }}>
+              {avatarUrl
+                ? <img src={avatarUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+                : <span style={{ fontWeight:700, fontSize:22, color:"white" }}>{initials}</span>
+              }
+            </div>
+            {tab==="edit" && (
+              <>
+                <button onClick={()=>fileRef.current.click()} style={{ position:"absolute", bottom:0, right:0, width:22, height:22, borderRadius:"50%", background:"var(--primary)", border:"2px solid white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+                  <ICamera size={10} color="white"/>
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
+                  onChange={e=>{const f=e.target.files[0];if(f){setFile(f);setPreview(URL.createObjectURL(f));}}}/>
+              </>
+            )}
+          </div>
 
-        {/* ── HERO CARD ── */}
-        <div className="card" style={{ padding: "32px", marginBottom: 24, borderRadius: 24, position: "relative", overflow: "hidden" }}>
-          {/* Accent corner */}
-          <div style={{ position: "absolute", top: 0, right: 0, width: 220, height: 220, background: `radial-gradient(circle at top right, ${accentLt}, transparent 70%)`, borderRadius: "0 24px 0 0", pointerEvents: "none" }} />
+          {/* Name + badges */}
+          <div style={{ flex:1, minWidth:140 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap", marginBottom:2 }}>
+              <span style={{ fontSize:17, fontWeight:700, color:"var(--text-h)" }}>
+                {(profile.first_name||profile.last_name) ? `${profile.first_name} ${profile.last_name}`.trim() : profile.username}
+              </span>
+              <span className={`badge badge-${isK?"red":"blue"}`}>{isK?<IWrench size={10}/>:<IHome size={10}/>} {roleLabel}</span>
+              <span className="badge badge-green"><IShield size={10}/> Verified</span>
+            </div>
+            <div style={{ fontSize:13, color:"var(--text-s)" }}>@{profile.username}</div>
+            {profile.bio && <p style={{ fontSize:13, color:"var(--text-b)", lineHeight:1.6, marginTop:5 }}>{profile.bio}</p>}
+          </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 28, flexWrap: "wrap", position: "relative" }}>
-            {/* Avatar */}
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <div style={{ width: 90, height: 90, borderRadius: "50%", background: avatarUrl ? "transparent" : accentGrd, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 800, color: "white", fontFamily: "Syne, sans-serif", overflow: "hidden", border: `3px solid ${accentBdr}`, boxShadow: `0 0 0 4px ${accentLt}, 0 8px 28px rgba(0,0,0,0.08)` }}>
-                {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+          {/* Quick stats */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {[
+              { label:"Phone", value:profile.phone_number },
+              { label:"Joined", value:profile.date_joined },
+            ].filter(x=>x.value).map(({label,value})=>(
+              <div key={label} style={{ background:"var(--bg-subtle)", border:"1px solid var(--border)", borderRadius:8, padding:"8px 12px" }}>
+                <div style={{ fontSize:10, fontWeight:600, color:"var(--text-p)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>{label}</div>
+                <div style={{ fontSize:13, fontWeight:600, color:"var(--text-h)" }}>{value}</div>
               </div>
-              {tab === "edit" && (
-                <>
-                  <button onClick={() => fileRef.current.click()} style={{ position: "absolute", bottom: 2, right: 2, width: 28, height: 28, borderRadius: "50%", background: accentGrd, border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 12, boxShadow: `0 2px 8px ${accentShd}` }}>✎</button>
-                  <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files[0]; if (f) { setFile(f); setPreview(URL.createObjectURL(f)); } }} />
-                </>
-              )}
-            </div>
-
-            {/* Info */}
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-                <h2 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 24, color: "#0F172A", margin: 0 }}>
-                  {profile.first_name||profile.last_name ? `${profile.first_name} ${profile.last_name}`.trim() : profile.username}
-                </h2>
-                <span className={`pill ${pillCls}`}>{roleLabel}</span>
-                <span className="pill pill-green">✓ Verified</span>
-              </div>
-              <div style={{ color: "#94A3B8", fontSize: 13, marginBottom: profile.bio ? 10 : 0 }}>@{profile.username}</div>
-              {profile.bio && <p style={{ color: "#475569", fontSize: 14, lineHeight: 1.65, maxWidth: 520 }}>{profile.bio}</p>}
-            </div>
-
-            {/* Meta */}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {[["📅", profile.date_joined, "Joined"], ["📱", profile.phone_number, "Phone"]].map(([icon, val, label]) => (
-                <div key={label} style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 14, padding: "12px 16px", textAlign: "center", minWidth: 110 }}>
-                  <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>{val || "—"}</div>
-                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>{label}</div>
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* ── TABS ── */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 24, background: "white", border: "1px solid #E2E8F0", borderRadius: 14, padding: 5, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-          {[["info","👤","My Info"],["edit","✏️","Edit Profile"],["password","🔒","Change Password"]].map(([id, icon, label]) => (
-            <button key={id} onClick={() => { setTab(id); setError(""); setMsg(""); }} style={{
-              flex: 1, padding: "10px 14px", border: "none", cursor: "pointer",
-              fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13, borderRadius: 10,
-              transition: "all 0.22s",
-              background: tab === id ? accentGrd : "transparent",
-              color: tab === id ? "white" : "#64748B",
-              boxShadow: tab === id ? `0 4px 14px ${accentShd}` : "none",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-            }}>
-              <span>{icon}</span><span>{label}</span>
+        {/* Tabs */}
+        <div className="tab-bar" style={{ marginBottom:14 }}>
+          {TABS.map(({id,Icon,label})=>(
+            <button key={id} onClick={()=>{setTab(id);setErr("");setMsg("");}} className={`tab-btn${tab===id?" on":""}`}>
+              <Icon size={13}/> {label}
             </button>
           ))}
         </div>
 
         {/* Alerts */}
-        {error && <div className="fade-in" style={{ background: "#FFF1F2", border: "1px solid #FECDD3", borderRadius: 12, padding: "13px 18px", marginBottom: 20, color: "#BE123C", fontSize: 14, display: "flex", gap: 10 }}><span>⚠</span>{error}</div>}
-        {msg   && <div className="fade-in" style={{ background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: 12, padding: "13px 18px", marginBottom: 20, color: "#065F46", fontSize: 14, display: "flex", gap: 10 }}><span>✓</span>{msg}</div>}
+        {error && <div className="alert alert-err"  style={{marginBottom:12}}><IAlertCirc size={15} style={{flexShrink:0}}/>{error}</div>}
+        {msg   && <div className="alert alert-ok"   style={{marginBottom:12}}><ICheckCirc size={15} style={{flexShrink:0}}/>{msg}</div>}
 
-        {/* ── INFO TAB ── */}
-        {tab === "info" && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 14 }}>
-            {[["👤","Username",profile.username],["🏷️","Role",roleLabel],["✉️","Email",profile.email||"Not set"],["📱","Phone",profile.phone_number],["📍","Address",profile.address||"Not set"],["📅","Member Since",profile.date_joined],["🪪","Full Name",(profile.first_name||profile.last_name)?`${profile.first_name} ${profile.last_name}`.trim():"Not set"]].map(([icon,label,value]) => (
-              <div key={label} className="card card-hover" style={{ padding: "18px 20px", borderRadius: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>{icon} {label}</div>
-                <div style={{ fontSize: 15, color: "#0F172A", fontWeight: 600 }}>{value}</div>
+        {/* ── INFO ── */}
+        {tab==="info" && (
+          <div className="card" style={{ padding:"4px 0" }}>
+            {[
+              [IUser,    "Username",    profile.username],
+              [isK?IWrench:IHome, "Role", roleLabel],
+              [IMail,    "Email",       profile.email||"—"],
+              [IPhone,   "Phone",       profile.phone_number||"—"],
+              [IMapPin,  "Address",     profile.address||"—"],
+              [ICalendar,"Member Since",profile.date_joined||"—"],
+            ].map(([Icon,label,value])=>(
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 18px", borderBottom:"1px solid #F3F4F6" }}>
+                <div style={{ width:32, height:32, borderRadius:8, background:"var(--bg-subtle)", border:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <Icon size={14} color="var(--text-s)"/>
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:"var(--text-p)", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>{label}</div>
+                  <div style={{ fontSize:14, fontWeight:500, color:"var(--text-h)" }}>{value}</div>
+                </div>
               </div>
             ))}
             {profile.bio && (
-              <div className="card" style={{ padding: "18px 20px", borderRadius: 16, gridColumn: "1/-1" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📝 Bio</div>
-                <div style={{ fontSize: 14, color: "#334155", lineHeight: 1.75 }}>{profile.bio}</div>
+              <div style={{ display:"flex", gap:12, padding:"13px 18px" }}>
+                <div style={{ width:32, height:32, borderRadius:8, background:"var(--bg-subtle)", border:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <IFileText size={14} color="var(--text-s)"/>
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:"var(--text-p)", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4 }}>Bio</div>
+                  <p style={{ fontSize:14, color:"var(--text-b)", lineHeight:1.7 }}>{profile.bio}</p>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* ── EDIT TAB ── */}
-        {tab === "edit" && (
-          <div className="card" style={{ padding: "30px", borderRadius: 22 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 18 }}>
-              {[["first_name","First Name","text","First name"],["last_name","Last Name","text","Last name"],["email","Email","email","your@email.com"],["phone_number","Phone","tel","98XXXXXXXX"],["address","Address","text","City, District"]].map(([name,label,type,ph]) => (
+        {/* ── EDIT ── */}
+        {tab==="edit" && (
+          <div className="card" style={{ padding:"22px" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:13 }}>
+              {[
+                {label:"First Name",   name:"first_name",   type:"text",  placeholder:"First name",    Icon:IUser},
+                {label:"Last Name",    name:"last_name",    type:"text",  placeholder:"Last name"},
+                {label:"Email",        name:"email",        type:"email", placeholder:"you@email.com",  Icon:IMail},
+                {label:"Phone Number", name:"phone_number", type:"tel",   placeholder:"98XXXXXXXX",     Icon:IPhone},
+              ].map(({label,name,type,placeholder,Icon})=>(
                 <div key={name}>
-                  <FLabel>{label}</FLabel>
-                  <input name={name} type={type} placeholder={ph} value={edit[name]}
-                    onChange={e => setEdit({ ...edit, [e.target.name]: e.target.value })}
-                    onFocus={() => setFocus(name)} onBlur={() => setFocus("")}
-                    className={focusCls(name)} />
+                  <label className="lbl">{label}</label>
+                  <div className="input-wrap">
+                    {Icon && <span className="input-icon-l"><Icon size={14}/></span>}
+                    <input type={type} placeholder={placeholder} value={edit[name]}
+                      onChange={e=>{setEdit(s=>({...s,[name]:e.target.value}));setErr("");}}
+                      className={`field${Icon?" pl":""}`}/>
+                  </div>
                 </div>
               ))}
-              <div style={{ gridColumn: "1/-1" }}>
-                <FLabel>Bio</FLabel>
-                <textarea name="bio" value={edit.bio} placeholder="Tell people about yourself…" rows={3}
-                  onChange={e => setEdit({ ...edit, bio: e.target.value })}
-                  onFocus={() => setFocus("bio")} onBlur={() => setFocus("")}
-                  className={focusCls("bio")} style={{ resize: "vertical", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+              <div style={{ gridColumn:"1/-1" }}>
+                <label className="lbl">Address</label>
+                <div className="input-wrap">
+                  <span className="input-icon-l"><IMapPin size={14}/></span>
+                  <input type="text" placeholder="City, District" value={edit.address}
+                    onChange={e=>{setEdit(s=>({...s,address:e.target.value}));setErr("");}}
+                    className="field pl"/>
+                </div>
+              </div>
+              <div style={{ gridColumn:"1/-1" }}>
+                <label className="lbl">Bio</label>
+                <textarea rows={3} placeholder="Tell people about yourself…" value={edit.bio}
+                  onChange={e=>{setEdit(s=>({...s,bio:e.target.value}));setErr("");}}
+                  className="field" style={{ fontFamily:"Inter,sans-serif" }}/>
               </div>
             </div>
 
             {preview && (
-              <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: accentLt, border: `1px solid ${accentBdr}`, borderRadius: 12 }}>
-                <img src={preview} style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: `2px solid ${accentBdr}` }} alt="" />
-                <div>
-                  <div style={{ fontSize: 13, color: "#0F172A", fontWeight: 600, marginBottom: 4 }}>New photo selected</div>
-                  <button onClick={() => { setPreview(null); setFile(null); }} style={{ fontSize: 12, color: "#E11D48", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}>✕ Remove</button>
+              <div className="alert alert-info" style={{ marginTop:13, alignItems:"center" }}>
+                <img src={preview} style={{ width:36,height:36,borderRadius:"50%",objectFit:"cover",flexShrink:0 }} alt=""/>
+                <div style={{ flex:1 }}>
+                  <span style={{ fontSize:13, fontWeight:600 }}>New photo selected</span>
+                  <button onClick={()=>{setPreview(null);setFile(null);}} style={{ marginLeft:10, background:"none", border:"none", cursor:"pointer", color:"var(--danger)", fontSize:12, fontWeight:600, fontFamily:"Inter,sans-serif" }}>Remove</button>
                 </div>
               </div>
             )}
 
-            <div style={{ marginTop: 26, display: "flex", gap: 12 }}>
-              <button onClick={saveProfile} disabled={saving} className={btnCls} style={{ padding: "13px 32px", borderRadius: 12, fontSize: 15 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", zIndex: 1 }}>
-                  {saving ? <><div className="spinner" />Saving…</> : "Save Changes →"}
-                </span>
+            <div style={{ display:"flex", gap:8, marginTop:18 }}>
+              <button onClick={saveProfile} disabled={saving} className="btn btn-primary btn-md">
+                {saving ? <><div className="spin"/>Saving…</> : <><ISave size={14}/> Save Changes</>}
               </button>
-              <button onClick={() => { setPreview(null); setFile(null); load(); setMsg(""); setError(""); }} className="btn btn-ghost" style={{ padding: "13px 22px", borderRadius: 12, fontSize: 15 }}>
-                Reset
+              <button onClick={()=>{setPreview(null);setFile(null);load();setMsg("");setErr("");}} className="btn btn-outline btn-md">
+                <IRefresh size={14}/> Reset
               </button>
             </div>
           </div>
         )}
 
-        {/* ── PASSWORD TAB ── */}
-        {tab === "password" && (
-          <div className="card" style={{ padding: "30px", borderRadius: 22, maxWidth: 480 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {[["old_password","Current Password","Your current password"],["new_password","New Password","Min. 8 characters"],["confirm_password","Confirm Password","Re-enter new password"]].map(([name,label,ph]) => (
-                <div key={name}>
-                  <FLabel>{label}</FLabel>
-                  <input name={name} type="password" placeholder={ph} value={pw[name]}
-                    onChange={e => { setPw({ ...pw, [e.target.name]: e.target.value }); setError(""); }}
-                    onFocus={() => setFocus(name)} onBlur={() => setFocus("")}
-                    className={focusCls(name)} />
+        {/* ── PASSWORD ── */}
+        {tab==="password" && (
+          <div className="card" style={{ padding:"22px", maxWidth:400 }}>
+            <div className="form-stack">
+              {[
+                { label:"Current Password", key:"old_password",     toggleKey:"old" },
+                { label:"New Password",     key:"new_password",     toggleKey:"nw"  },
+                { label:"Confirm Password", key:"confirm_password", toggleKey:null  },
+              ].map(({label,key,toggleKey})=>(
+                <div key={key}>
+                  <label className="lbl">{label}</label>
+                  <div className="input-wrap">
+                    <span className="input-icon-l"><ILock size={14}/></span>
+                    <input type={showPw[toggleKey]?"text":"password"} placeholder="••••••••"
+                      value={pw[key]}
+                      onChange={e=>{setPw(p=>({...p,[key]:e.target.value}));setErr("");}}
+                      className="field pl pr"/>
+                    <span className="input-icon-r">
+                      {key==="confirm_password" && pw.confirm_password && (
+                        pw.new_password===pw.confirm_password
+                          ? <ICheckCirc size={14} color="#16A34A"/>
+                          : <IAlertCirc size={14} color="#DC2626"/>
+                      )}
+                      {toggleKey && (
+                        <button type="button" style={{ background:"none",border:"none",cursor:"pointer",color:"var(--text-p)",display:"flex" }}
+                          onClick={()=>setShowPw(p=>({...p,[toggleKey]:!p[toggleKey]}))}>
+                          {showPw[toggleKey] ? <IEyeOff size={14}/> : <IEye size={14}/>}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                  {key==="new_password" && pw.new_password && (
+                    <>
+                      <div className="pw-bars">{[1,2,3,4].map(i=><div key={i} className="pw-bar" style={{background:str>=i?strClr:undefined}}/>)}</div>
+                      <p className="pw-hint" style={{color:strClr}}>{strTxt}</p>
+                    </>
+                  )}
                 </div>
               ))}
-
-              {pw.new_password && (
-                <div>
-                  <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
-                    {[1,2,3,4].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 3, background: str >= i ? strC : "#E2E8F0", transition: "background 0.3s" }} />)}
-                  </div>
-                  <span style={{ fontSize: 11, color: strC, fontWeight: 700 }}>{strLbl} password</span>
-                </div>
-              )}
-
-              <button onClick={savePw} disabled={saving} className={btnCls} style={{ padding: "14px 32px", borderRadius: 12, fontSize: 15, marginTop: 4 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", zIndex: 1 }}>
-                  {saving ? <><div className="spinner" />Updating…</> : "Update Password →"}
-                </span>
+              <button onClick={savePw} disabled={saving} className="btn btn-primary btn-md" style={{ marginTop:4 }}>
+                {saving ? <><div className="spin"/>Updating…</> : <><ILock size={14}/> Change Password</>}
               </button>
             </div>
           </div>
