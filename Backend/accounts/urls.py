@@ -1,27 +1,19 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import (
-    register_user,
-    login_user,
-    forgot_password,
-    reset_password,
-    get_profile,
-    update_profile,
-    change_password,
-)
+from . import views
 
 urlpatterns = [
-    # 2.2.1 Auth
-    path('register/', register_user),
-    path('login/', login_user),
-    path('token/refresh/', TokenRefreshView.as_view()),
+    # Auth
+    path("register/",               views.register_user,    name="register"),
+    path("login/",                  views.login_user,       name="login"),
+    path("token/refresh/",          TokenRefreshView.as_view(), name="token_refresh"),
 
-    # 2.2.2 Forgot / Reset Password
-    path('forgot-password/', forgot_password),
-    path('reset-password/', reset_password),
+    # Password reset
+    path("forgot-password/",        views.forgot_password,  name="forgot_password"),
+    path("reset-password/",         views.reset_password,   name="reset_password"),
 
-    # 2.3 Profile Management
-    path('profile/', get_profile),
-    path('profile/update/', update_profile),
-    path('profile/change-password/', change_password),
+    # Profile
+    path("profile/",                views.get_profile,      name="profile"),
+    path("profile/update/",         views.update_profile,   name="profile_update"),
+    path("profile/change-password/",views.change_password,  name="change_password"),
 ]

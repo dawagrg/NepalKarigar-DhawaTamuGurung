@@ -1,152 +1,141 @@
+import uuid
+from datetime import timedelta, datetime, timezone
+
 from django.contrib.auth import get_user_model, authenticate
-from django.utils import timezone
-from datetime import timedelta
-from rest_framework.decorators import api_view, permission_classes, parser_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from rest_framework.response import Response
-from rest_framework import status
+from django.utils import timezone as dj_timezone
+
+from rest_framework              import status
+from rest_framework.decorators   import api_view, permission_classes
+from rest_framework.permissions  import IsAuthenticated
+from rest_framework.response     import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+
 from .models import PasswordResetToken
 
 User = get_user_model()
 
 
-def get_tokens_for_user(user):
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _tokens(user):
     refresh = RefreshToken.for_user(user)
-    return {
-        "refresh": str(refresh),
-        "access": str(refresh.access_token),
-    }
+    return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
-def user_data(user, request=None):
-    """Helper — returns consistent user payload across all endpoints."""
-    profile_image_url = None
+def _user_data(user, request=None):
+    """Return user dict with full absolute URL for profile_image."""
+    image_url = None
     if user.profile_image:
         if request:
-            profile_image_url = request.build_absolute_uri(user.profile_image.url)
+            image_url = request.build_absolute_uri(user.profile_image.url)
         else:
-            profile_image_url = user.profile_image.url
+            image_url = user.profile_image.url   # relative fallback
     return {
-        "user_id": user.id,
-        "username": user.username,
-        "role": user.role,
-        "email": user.email,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "phone_number": user.phone_number,
-        "bio": user.bio or "",
-        "address": user.address or "",
-        "profile_image": profile_image_url,
-        "date_joined": user.date_joined.strftime("%Y-%m-%d"),
+        "user_id":       user.id,
+        "username":      user.username,
+        "first_name":    user.first_name,
+        "last_name":     user.last_name,
+        "email":         user.email,
+        "phone_number":  user.phone_number,
+        "role":          user.role,
+        "bio":           user.bio or "",
+        "address":       user.address or "",
+        "profile_image": image_url,
+        "date_joined":   user.date_joined.strftime("%Y-%m-%d") if user.date_joined else "",
     }
 
 
-# ─────────────────────────────────────────
-#  2.2.1  REGISTER
-# ─────────────────────────────────────────
+# ── 2.2.1  Register ───────────────────────────────────────────────────────────
+
 @api_view(["POST"])
 def register_user(request):
-    username     = request.data.get("username", "").strip()
-    password     = request.data.get("password", "")
-    phone_number = request.data.get("phone_number", "").strip()
-    email        = request.data.get("email", "").strip()
-    first_name   = request.data.get("first_name", "").strip()
-    last_name    = request.data.get("last_name", "").strip()
-    role         = request.data.get("role", "customer").strip().lower()
+    data = request.data
 
-    # ── Validation ──
-    if not username or not password:
-        return Response({"error": "Username and password are required"},
-                        status=status.HTTP_400_BAD_REQUEST)
+    username     = data.get("username", "").strip()
+    phone_number = data.get("phone_number", "").strip()
+    email        = data.get("email", "").strip()
+    first_name   = data.get("first_name", "").strip()
+    last_name    = data.get("last_name", "").strip()
+    password     = data.get("password", "")
+    role         = data.get("role", "customer")
+
+    if not username:
+        return Response({"error": "Username is required."}, status=400)
     if not phone_number:
-        return Response({"error": "Phone number is required"},
-                        status=status.HTTP_400_BAD_REQUEST)
-    if role not in ("customer", "karigar"):
-        return Response({"error": "Role must be either 'customer' or 'karigar'"},
-                        status=status.HTTP_400_BAD_REQUEST)
-    if len(password) < 8:
-        return Response({"error": "Password must be at least 8 characters"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Phone number is required."}, status=400)
+    if not password:
+        return Response({"error": "Password is required."}, status=400)
+
     if User.objects.filter(username=username).exists():
-        return Response({"error": "Username already exists"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Username already taken."}, status=400)
     if User.objects.filter(phone_number=phone_number).exists():
-        return Response({"error": "Phone number already registered"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Phone number already registered."}, status=400)
     if email and User.objects.filter(email=email).exists():
-        return Response({"error": "Email already registered"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Email address already registered."}, status=400)
 
     user = User.objects.create_user(
         username=username,
-        phone_number=phone_number,
         password=password,
+        phone_number=phone_number,
         email=email,
         first_name=first_name,
         last_name=last_name,
         role=role,
     )
 
-    tokens = get_tokens_for_user(user)
-    return Response({
-        "message": f"Registered successfully as {role.capitalize()}!",
-        **user_data(user, request),
-        **tokens,
-    }, status=status.HTTP_201_CREATED)
+    tokens = _tokens(user)
+    return Response({**tokens, **_user_data(user, request), "message": "Account created successfully."}, status=201)
 
 
-# ─────────────────────────────────────────
-#  2.2.1  LOGIN
-# ─────────────────────────────────────────
+# ── 2.2.1  Login ──────────────────────────────────────────────────────────────
+
 @api_view(["POST"])
 def login_user(request):
-    username = request.data.get("username", "").strip()
-    password = request.data.get("password", "")
+    identifier = request.data.get("username", "").strip()
+    password   = request.data.get("password", "")
 
-    if not username or not password:
-        return Response({"error": "Username and password are required"},
-                        status=status.HTTP_400_BAD_REQUEST)
+    if not identifier or not password:
+        return Response({"error": "Phone/email and password are required."}, status=400)
 
-    user = authenticate(username=username, password=password)
+    # Try authenticating by username directly
+    user = authenticate(username=identifier, password=password)
 
-    # Fallback: phone number login
+    # If that fails, try looking up by phone number
     if user is None:
         try:
-            user_obj = User.objects.get(phone_number=username)
+            user_obj = User.objects.get(phone_number=identifier)
+            user = authenticate(username=user_obj.username, password=password)
+        except User.DoesNotExist:
+            pass
+
+    # Also try by email
+    if user is None:
+        try:
+            user_obj = User.objects.get(email=identifier)
             user = authenticate(username=user_obj.username, password=password)
         except User.DoesNotExist:
             pass
 
     if user is None:
-        return Response({"error": "Invalid credentials"},
-                        status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"error": "Incorrect phone number/email or password."}, status=401)
 
-    tokens = get_tokens_for_user(user)
-    return Response({
-        "message": f"Welcome back, {user.username}!",
-        **user_data(user, request),
-        **tokens,
-    })
+    tokens = _tokens(user)
+    return Response({**tokens, **_user_data(user, request)})
 
 
-# ─────────────────────────────────────────
-#  2.2.2  FORGOT PASSWORD
-# ─────────────────────────────────────────
+# ── 2.2.2  Forgot Password ────────────────────────────────────────────────────
+
 @api_view(["POST"])
 def forgot_password(request):
     identifier = request.data.get("identifier", "").strip()
     if not identifier:
-        return Response({"error": "Phone number or email is required"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Please provide a phone number or email."}, status=400)
 
     user = None
     try:
         user = User.objects.get(phone_number=identifier)
     except User.DoesNotExist:
         pass
-
     if user is None:
         try:
             user = User.objects.get(email=identifier)
@@ -154,111 +143,88 @@ def forgot_password(request):
             pass
 
     if user is None:
-        return Response({"message": "If the account exists, a reset token has been sent."})
+        return Response({"error": "No account found with that phone number or email."}, status=404)
 
-    PasswordResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
-    reset_token = PasswordResetToken.objects.create(user=user)
-
+    token = PasswordResetToken.objects.create(user=user)
     return Response({
-        "message": "Password reset token generated successfully.",
-        "reset_token": str(reset_token.token),
-        "note": "Token expires in 1 hour."
+        "message":     "Reset token generated. Use it to set a new password within 1 hour.",
+        "reset_token": str(token.token),
     })
 
 
-# ─────────────────────────────────────────
-#  2.2.2  RESET PASSWORD
-# ─────────────────────────────────────────
+# ── 2.2.2  Reset Password ─────────────────────────────────────────────────────
+
 @api_view(["POST"])
 def reset_password(request):
     token_str        = request.data.get("reset_token", "").strip()
     new_password     = request.data.get("new_password", "")
     confirm_password = request.data.get("confirm_password", "")
 
-    if not token_str or not new_password or not confirm_password:
-        return Response({"error": "All fields are required"},
-                        status=status.HTTP_400_BAD_REQUEST)
+    if not token_str:
+        return Response({"error": "Reset token is required."}, status=400)
+    if not new_password or not confirm_password:
+        return Response({"error": "Both password fields are required."}, status=400)
     if new_password != confirm_password:
-        return Response({"error": "Passwords do not match"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Passwords do not match."}, status=400)
     if len(new_password) < 8:
-        return Response({"error": "Password must be at least 8 characters"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Password must be at least 8 characters."}, status=400)
 
     try:
-        reset_token = PasswordResetToken.objects.get(token=token_str, is_used=False)
+        token = PasswordResetToken.objects.get(token=token_str, is_used=False)
     except PasswordResetToken.DoesNotExist:
-        return Response({"error": "Invalid or already used reset token"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Invalid or already used token."}, status=400)
 
-    if timezone.now() > reset_token.created_at + timedelta(hours=1):
-        reset_token.is_used = True
-        reset_token.save()
-        return Response({"error": "Reset token has expired. Please request a new one."},
-                        status=status.HTTP_400_BAD_REQUEST)
+    # Check expiry (1 hour)
+    age = dj_timezone.now() - token.created_at
+    if age > timedelta(hours=1):
+        return Response({"error": "Token has expired. Please request a new one."}, status=400)
 
-    user = reset_token.user
-    user.set_password(new_password)
-    user.save()
-    reset_token.is_used = True
-    reset_token.save()
+    token.user.set_password(new_password)
+    token.user.save()
+    token.is_used = True
+    token.save()
 
-    return Response({"message": "Password reset successfully. You can now log in."})
+    return Response({"message": "Password updated successfully."})
 
 
-# ─────────────────────────────────────────
-#  2.3  GET PROFILE
-# ─────────────────────────────────────────
+# ── 2.3  Get Profile ──────────────────────────────────────────────────────────
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_profile(request):
-    return Response(user_data(request.user, request))
+    return Response(_user_data(request.user, request))
 
 
-# ─────────────────────────────────────────
-#  2.3  UPDATE PROFILE
-# ─────────────────────────────────────────
-@api_view(["PUT", "PATCH"])
+# ── 2.3  Update Profile ───────────────────────────────────────────────────────
+
+@api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
-@parser_classes([MultiPartParser, FormParser, JSONParser])
 def update_profile(request):
     user = request.user
+    data = request.data
 
-    user.first_name = request.data.get("first_name", user.first_name)
-    user.last_name  = request.data.get("last_name",  user.last_name)
-    user.bio        = request.data.get("bio",        user.bio)
-    user.address    = request.data.get("address",    user.address)
+    for field in ("first_name", "last_name", "email", "bio", "address"):
+        val = data.get(field)
+        if val is not None:
+            setattr(user, field, val)
 
-    # Phone uniqueness
-    new_phone = request.data.get("phone_number", user.phone_number)
-    if new_phone != user.phone_number:
-        if User.objects.filter(phone_number=new_phone).exists():
-            return Response({"error": "Phone number already in use"},
-                            status=status.HTTP_400_BAD_REQUEST)
-        user.phone_number = new_phone
+    # Phone — check uniqueness before saving
+    phone = data.get("phone_number")
+    if phone and phone != user.phone_number:
+        if User.objects.filter(phone_number=phone).exclude(pk=user.pk).exists():
+            return Response({"error": "That phone number is already in use."}, status=400)
+        user.phone_number = phone
 
-    # Email uniqueness
-    new_email = request.data.get("email", user.email)
-    if new_email and new_email != user.email:
-        if User.objects.filter(email=new_email).exclude(pk=user.pk).exists():
-            return Response({"error": "Email already in use"},
-                            status=status.HTTP_400_BAD_REQUEST)
-        user.email = new_email
-
+    # Profile image
     if "profile_image" in request.FILES:
         user.profile_image = request.FILES["profile_image"]
 
     user.save()
-
-    return Response({
-        "message": "Profile updated successfully",
-        **user_data(user, request),
-    })
+    return Response(_user_data(user, request))
 
 
-# ─────────────────────────────────────────
-#  2.3  CHANGE PASSWORD
-# ─────────────────────────────────────────
+# ── 2.3  Change Password ──────────────────────────────────────────────────────
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def change_password(request):
@@ -267,21 +233,15 @@ def change_password(request):
     new_password     = request.data.get("new_password", "")
     confirm_password = request.data.get("confirm_password", "")
 
-    if not old_password or not new_password or not confirm_password:
-        return Response({"error": "All fields are required"},
-                        status=status.HTTP_400_BAD_REQUEST)
     if not user.check_password(old_password):
-        return Response({"error": "Current password is incorrect"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Current password is incorrect."}, status=400)
     if new_password != confirm_password:
-        return Response({"error": "New passwords do not match"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "New passwords do not match."}, status=400)
     if len(new_password) < 8:
-        return Response({"error": "Password must be at least 8 characters"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Password must be at least 8 characters."}, status=400)
 
     user.set_password(new_password)
     user.save()
 
-    tokens = get_tokens_for_user(user)
-    return Response({"message": "Password changed successfully.", **tokens})
+    tokens = _tokens(user)
+    return Response({**tokens, "message": "Password changed successfully."})
