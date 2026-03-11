@@ -39,7 +39,7 @@ export default function Profile() {
   };
 
   const isK       = (profile?.role||"customer") === "karigar";
-  const roleLabel = isK ? "Worker" : "Customer";
+  const roleLabel = isK ? "Karigar" : "Customer";
 
   const saveProfile = async () => {
     setSave(true); setErr(""); setMsg("");
@@ -50,6 +50,17 @@ export default function Profile() {
       const res = await updateProfile(fd);
       setProfile(res.data);
       localStorage.setItem("username", res.data.username);
+      // Cache new profile image URL so Navbar picks it up immediately
+      const MEDIA_BASE = "http://127.0.0.1:8000";
+      const raw = res.data.profile_image;
+      if (raw) {
+        const full = raw.startsWith("http") ? raw : `${MEDIA_BASE}${raw.startsWith("/") ? raw : "/media/" + raw}`;
+        localStorage.setItem("profile_image", full);
+      } else {
+        localStorage.removeItem("profile_image");
+      }
+      // Tell Navbar to refresh its avatar
+      window.dispatchEvent(new Event("profile-updated"));
       setMsg("Profile saved successfully.");
       setFile(null); setPreview(null);
     } catch (e) { setErr(e.response?.data?.error || "Failed to update profile."); }
@@ -85,7 +96,14 @@ export default function Profile() {
     </div>
   );
 
-  const avatarUrl = preview || profile?.profile_image;
+  // Django returns a relative path like "profiles/photo.jpg"
+  // We need the full URL: http://127.0.0.1:8000/media/profiles/photo.jpg
+  const MEDIA_BASE = "http://127.0.0.1:8000";
+  const rawImage   = profile?.profile_image;
+  const avatarUrl  = preview
+    || (rawImage
+        ? (rawImage.startsWith("http") ? rawImage : `${MEDIA_BASE}${rawImage.startsWith("/") ? "" : "/media/"}${rawImage}`)
+        : null);
   const initials  = (profile?.first_name?.[0] || profile?.username?.[0] || "U").toUpperCase();
 
   const TABS = [
@@ -100,7 +118,7 @@ export default function Profile() {
 
         {/* Header */}
         <div className="card" style={{ padding:"20px 22px", marginBottom:14, display:"flex", alignItems:"center", gap:18, flexWrap:"wrap" }}>
-          {/* Avatar */}
+          {/* Avatar — camera button is always visible */}
           <div style={{ position:"relative", flexShrink:0 }}>
             <div style={{ width:66, height:66, borderRadius:"50%", background:avatarUrl?"transparent":"var(--primary)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"2px solid var(--primary-bd)" }}>
               {avatarUrl
@@ -108,15 +126,18 @@ export default function Profile() {
                 : <span style={{ fontWeight:700, fontSize:22, color:"white" }}>{initials}</span>
               }
             </div>
-            {tab==="edit" && (
-              <>
-                <button onClick={()=>fileRef.current.click()} style={{ position:"absolute", bottom:0, right:0, width:22, height:22, borderRadius:"50%", background:"var(--primary)", border:"2px solid white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-                  <ICamera size={10} color="white"/>
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
-                  onChange={e=>{const f=e.target.files[0];if(f){setFile(f);setPreview(URL.createObjectURL(f));}}}/>
-              </>
-            )}
+            {/* Camera upload — always shown so users can change photo from any tab */}
+            <button
+              onClick={() => fileRef.current.click()}
+              title="Change profile photo"
+              style={{ position:"absolute", bottom:0, right:0, width:24, height:24, borderRadius:"50%", background:"var(--primary)", border:"2px solid white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", boxShadow:"0 1px 4px rgba(0,0,0,0.18)" }}>
+              <ICamera size={11} color="white"/>
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
+              onChange={e => {
+                const f = e.target.files[0];
+                if (f) { setFile(f); setPreview(URL.createObjectURL(f)); setTab("edit"); }
+              }}/>
           </div>
 
           {/* Name + badges */}

@@ -118,7 +118,7 @@ export default function Register() {
                 <input
                   type="text"
                   className="field pl"
-                  placeholder="John"
+                  placeholder="Nishan"
                   value={form.first_name}
                   onChange={e => set("first_name", e.target.value)}
                   autoComplete="given-name"
@@ -132,7 +132,7 @@ export default function Register() {
               <input
                 type="text"
                 className="field"
-                placeholder="Doe"
+                placeholder="Gurung"
                 value={form.last_name}
                 onChange={e => set("last_name", e.target.value)}
                 autoComplete="family-name"
@@ -184,7 +184,7 @@ export default function Register() {
             >
               <option value="" disabled>Select your role…</option>
               <option value="customer">Customer — I want to hire workers</option>
-              <option value="karigar">Worker — I want to offer my skills</option>
+              <option value="karigar">Karigar — I want to offer my skills</option>
             </select>
           </div>
 

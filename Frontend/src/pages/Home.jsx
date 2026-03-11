@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { IWrench, ICheckCirc, IShield, IStar, IUser, IArrow } from "./Icons";
+import { IWrench, ICheckCirc, IShield, IStar, IUser, IArrow } from "../components/Icons";
 
 const CATEGORIES = [
   { name: "Plumber",      count: "120+", color: "#2563EB", bg: "#EFF6FF" },
@@ -45,7 +45,7 @@ export default function Home() {
             Connect with verified plumbers, electricians, carpenters and more — in your area, at fair prices.
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 48 }}>
-            <Link to={user ? "/" : "/register"} className="btn btn-primary btn-lg" style={{ textDecoration: "none" }}>
+            <Link to="/search" className="btn btn-primary btn-lg" style={{ textDecoration: "none" }}>
               Find a Karigar
             </Link>
             <Link to={user ? "/" : "/register"} state={{ role: "karigar" }} className="btn btn-outline btn-lg" style={{ textDecoration: "none" }}>
@@ -74,13 +74,20 @@ export default function Home() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
             {CATEGORIES.map(({ name, count, color, bg }) => (
-              <button key={name} style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: "18px 16px", cursor: "pointer", textAlign: "left", transition: "all .18s" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.background = bg; e.currentTarget.style.transform = "translateY(-2px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.background = "white"; e.currentTarget.style.transform = ""; }}>
-                <div style={{ fontWeight: 600, fontSize: 15, color: "#111827", marginBottom: 4 }}>{name}</div>
-                <div style={{ fontSize: 12, color, fontWeight: 500 }}>{count} workers</div>
-              </button>
+              <Link key={name} to={`/search?q=${encodeURIComponent(name)}`} style={{ textDecoration:"none" }}>
+                <div style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: "18px 16px", cursor: "pointer", textAlign: "left", transition: "all .18s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.background = bg; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.background = "white"; e.currentTarget.style.transform = ""; }}>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: "#111827", marginBottom: 4 }}>{name}</div>
+                  <div style={{ fontSize: 12, color, fontWeight: 500 }}>{count} workers</div>
+                </div>
+              </Link>
             ))}
+          </div>
+          <div style={{ textAlign:"center", marginTop:20 }}>
+            <Link to="/services" style={{ fontSize:13, fontWeight:600, color:"var(--primary)", textDecoration:"none" }}>
+              View all service categories →
+            </Link>
           </div>
         </div>
       </section>
