@@ -14,7 +14,9 @@ Make sure the directory structure exists:
 """
 
 from django.core.management.base import BaseCommand
-from accounts.models import ServiceCategory, SubService
+from django.apps import apps
+ServiceCategory = apps.get_model('accounts', 'ServiceCategory')
+SubService      = apps.get_model('accounts', 'SubService')
 
 
 SEED_DATA = [
