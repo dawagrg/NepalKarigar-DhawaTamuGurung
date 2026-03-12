@@ -40,3 +40,13 @@ export const deleteGalleryImage     = (id)   => API.delete(`karigar/gallery/${id
 // ── Sprint 2: Search & Public Profile ────────────────────────────────────────
 export const searchKarigars         = (params) => API.get("karigars/search/", { params });
 export const getKarigarPublicProfile = (id)    => API.get(`karigars/${id}/`);
+
+// ── Sprint 3: Booking & Bargaining ───────────────────────────────────────────
+export const createBooking       = (data) => API.post("bookings/", data);
+export const listBookings        = (params) => API.get("bookings/list/", { params });
+export const getBooking          = (id)   => API.get(`bookings/${id}/`);
+export const cancelBooking       = (id)   => API.post(`bookings/${id}/cancel/`);
+export const respondBooking      = (id, data) => API.post(`bookings/${id}/respond/`, data);
+export const bargainOffer        = (id, data) => API.post(`bookings/${id}/bargain/offer/`, data);
+export const bargainCounter      = (id, data) => API.post(`bookings/${id}/bargain/counter/`, data);
+export const bargainAcceptCounter= (id)   => API.post(`bookings/${id}/bargain/accept/`);

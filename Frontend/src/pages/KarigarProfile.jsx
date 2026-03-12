@@ -138,12 +138,12 @@ export default function KarigarProfile() {
 
             {/* CTA */}
             <div style={{ flexShrink:0 }}>
-              {localStorage.getItem("access_token") ? (
+              {localStorage.getItem("access_token") && localStorage.getItem("role") === "customer" ? (
                 <button className="btn btn-primary"
                   onClick={() => navigate(`/booking/new?karigar=${kp.id}`)}>
                   Book Now
                 </button>
-              ) : (
+              ) : localStorage.getItem("access_token") ? null : (
                 <button className="btn btn-primary"
                   onClick={() => navigate("/login")}>
                   Login to Book

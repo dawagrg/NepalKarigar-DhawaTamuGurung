@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { IWrench, IUser, IChevDown, ILogOut, ISettings } from "./Icons";
+import { IWrench, IUser, IChevDown, ILogOut, ISettings, ICalendar } from "./Icons";
 import { getProfile } from "../services/api";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
@@ -166,6 +166,12 @@ export default function Navbar() {
                     <IWrench size={14} color="var(--text-s)" /> My Dashboard
                   </Link>
                 )}
+                <Link to="/my-bookings" onClick={() => setOpen(false)}
+                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--text-b)", fontSize: 13, fontWeight: 500 }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <ICalendar size={14} color="var(--text-s)" /> My Bookings
+                </Link>
                 <div style={{ height: 1, background: "#F3F4F6" }} />
                 <button onClick={logout}
                   style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "9px 14px", background: "none", border: "none", color: "var(--danger)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif" }}
