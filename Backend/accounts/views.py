@@ -1,24 +1,15 @@
-import uuid
-from datetime import timedelta
-
-from django.contrib.auth import get_user_model, authenticate
-from django.utils import timezone as dj_timezone
-from django.db.models import Q, Avg
-
+from django.contrib.auth        import authenticate
+from django.db.models           import Q, Avg
+from django.utils               import timezone as dj_timezone
 from rest_framework.decorators  import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response    import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import (
-    PasswordResetToken, ServiceCategory, SubService,
-    KarigarProfile, KarigarGallery, Booking, Review
+    User, PasswordResetToken, ServiceCategory, SubService,
+    KarigarProfile, KarigarGallery, Booking, Review,
 )
-
-User = get_user_model()
-
-MEDIA_BASE = "http://127.0.0.1:8000"
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  HELPERS
@@ -30,18 +21,20 @@ def _tokens(user):
 
 
 def _abs_url(request, relative_url):
-    if not relative_url:
-        return None
-    if relative_url.startswith("http"):
-        return relative_url
-    return request.build_absolute_uri(relative_url)
+    if request:
+        return request.build_absolute_uri(relative_url)
+    return relative_url
 
 
 def _user_data(user, request=None):
-    image_url = None
+    img = None
     if user.profile_image:
-        image_url = (_abs_url(request, user.profile_image.url)
-                     if request else user.profile_image.url)
+        img = _abs_url(request, user.profile_image.url)
+    kp_id = None
+    try:
+        kp_id = user.karigar_profile.id
+    except Exception:
+        pass
     return {
         "user_id":       user.id,
         "username":      user.username,
@@ -50,95 +43,141 @@ def _user_data(user, request=None):
         "email":         user.email,
         "phone_number":  user.phone_number,
         "role":          user.role,
-        "bio":           user.bio or "",
-        "address":       user.address or "",
-        "profile_image": image_url,
-        "date_joined":   user.date_joined.strftime("%Y-%m-%d") if user.date_joined else "",
+        "bio":           user.bio,
+        "address":       user.address,
+        "profile_image": img,
+        "karigar_profile_id": kp_id,
+        "is_staff":      user.is_staff or user.is_superuser,
     }
 
 
 def _karigar_data(kp, request=None):
-    """Serialize a KarigarProfile to a dict."""
-    user = kp.user
-    image_url = None
-    if user.profile_image:
-        image_url = (_abs_url(request, user.profile_image.url)
-                     if request else user.profile_image.url)
-
-    gallery = [
-        {
+    img = None
+    if kp.user.profile_image:
+        img = _abs_url(request, kp.user.profile_image.url)
+    gallery = []
+    for g in kp.gallery.all():
+        gallery.append({
             "id":      g.id,
-            "image":   _abs_url(request, g.image.url) if g.image else None,
+            "image":   _abs_url(request, g.image.url),
             "caption": g.caption,
-        }
-        for g in kp.gallery.all()
-    ]
-
+        })
     sub_services = [
-        {"id": ss.id, "name": ss.name, "base_price": str(ss.base_price or "")}
+        {"id": ss.id, "name": ss.name, "base_price": str(ss.base_price) if ss.base_price else ""}
         for ss in kp.sub_services.filter(is_active=True)
     ]
-
     return {
         "karigar_profile_id": kp.id,
-        "user_id":            user.id,
-        "username":           user.username,
-        "full_name":          f"{user.first_name} {user.last_name}".strip() or user.username,
-        "profile_image":      image_url,
-        "bio":                user.bio or "",
-        "address":            user.address or "",
-        "phone_number":       user.phone_number,
-        "category_id":        kp.category.id   if kp.category else None,
-        "category_name":      kp.category.name if kp.category else "",
-        "sub_services":       sub_services,
-        "experience_years":   kp.experience_years,
-        "hourly_rate":        str(kp.hourly_rate) if kp.hourly_rate else "",
-        "location":           kp.location,
-        "district":           kp.district,
-        "available":          kp.available,
-        "is_verified":        kp.is_verified,
-        "total_jobs":         kp.total_jobs,
-        "avg_rating":         str(kp.avg_rating),
-        "gallery":            gallery,
+        "user_id":        kp.user.id,
+        "username":       kp.user.username,
+        "full_name":      f"{kp.user.first_name} {kp.user.last_name}".strip() or kp.user.username,
+        "profile_image":  img,
+        "role":           kp.user.role,
+        "bio":            kp.user.bio,
+        "phone_number":   kp.user.phone_number,
+        "email":          kp.user.email,
+        "category":       kp.category.name if kp.category else "",
+        "category_id":    kp.category.id   if kp.category else None,
+        "sub_services":   sub_services,
+        "experience_years": kp.experience_years,
+        "hourly_rate":    str(kp.hourly_rate) if kp.hourly_rate else "",
+        "location":       kp.location,
+        "district":       kp.district,
+        "available":      kp.available,
+        "is_verified":    kp.is_verified,
+        "total_jobs":     kp.total_jobs,
+        "avg_rating":     str(kp.avg_rating),
+        "gallery":        gallery,
+    }
+
+
+def _get_karigar_profile_id(karigar_user):
+    """Return the KarigarProfile pk for a karigar User, or None."""
+    try:
+        return karigar_user.karigar_profile.id
+    except Exception:
+        return None
+
+
+def _booking_data(b, request=None):
+    cust_img = None
+    if b.user.profile_image:
+        cust_img = _abs_url(request, b.user.profile_image.url)
+    kar_img = None
+    if b.karigar.profile_image:
+        kar_img = _abs_url(request, b.karigar.profile_image.url)
+
+    has_review = Review.objects.filter(booking=b).exists()
+
+    return {
+        "id":               b.id,
+        "customer_name":    f"{b.user.first_name} {b.user.last_name}".strip() or b.user.username,
+        "customer_username":b.user.username,
+        "customer_image":   cust_img,
+        "karigar_name":     f"{b.karigar.first_name} {b.karigar.last_name}".strip() or b.karigar.username,
+        "karigar_username": b.karigar.username,
+        "karigar_image":    kar_img,
+        "karigar_profile_id": _get_karigar_profile_id(b.karigar),
+        "sub_service_id":   b.sub_service.id   if b.sub_service else None,
+        "sub_service_name": b.sub_service.name if b.sub_service else "General",
+        "address":          b.address,
+        "date":             str(b.date),
+        "note":             b.note,
+        "status":           b.status,
+        "karigar_rate":     str(b.karigar_rate)  if b.karigar_rate  else "",
+        "offered_rate":     str(b.offered_rate)  if b.offered_rate  else "",
+        "counter_rate":     str(b.counter_rate)  if b.counter_rate  else "",
+        "final_rate":       str(b.final_rate)    if b.final_rate    else "",
+        "bargain_status":   b.bargain_status,
+        "bargain_message":  b.bargain_message,
+        "created_at":       b.created_at.isoformat() if b.created_at else "",
+        "updated_at":       b.updated_at.isoformat() if b.updated_at else "",
+        "has_review":       has_review,
     }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  SPRINT 1 — AUTH
+#  SPRINT 1 — AUTH & PROFILE
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def register_user(request):
-    data         = request.data
-    username     = data.get("username", "").strip()
-    phone_number = data.get("phone_number", "").strip()
-    email        = data.get("email", "").strip()
-    first_name   = data.get("first_name", "").strip()
-    last_name    = data.get("last_name", "").strip()
-    password     = data.get("password", "")
-    role         = data.get("role", "customer")
+    data = request.data
+    required = ["username", "password", "role", "phone_number"]
+    for field in required:
+        if not data.get(field):
+            return Response({"error": f"{field} is required."}, status=400)
 
-    if not username:     return Response({"error": "Username is required."}, status=400)
-    if not phone_number: return Response({"error": "Phone number is required."}, status=400)
-    if not password:     return Response({"error": "Password is required."}, status=400)
+    role = data.get("role")
+    if role not in ("customer", "karigar"):
+        return Response({"error": "Role must be 'customer' or 'karigar'."}, status=400)
 
-    if User.objects.filter(username=username).exists():
-        return Response({"error": "Username already taken."}, status=400)
-    if User.objects.filter(phone_number=phone_number).exists():
-        return Response({"error": "Phone number already registered."}, status=400)
-    if email and User.objects.filter(email=email).exists():
-        return Response({"error": "Email address already registered."}, status=400)
+    if User.objects.filter(username=data["username"]).exists():
+        return Response({"username": ["A user with that username already exists."]}, status=400)
+    if User.objects.filter(phone_number=data["phone_number"]).exists():
+        return Response({"phone_number": ["Phone number already registered."]}, status=400)
+    if data.get("email") and User.objects.filter(email=data["email"]).exists():
+        return Response({"email": ["Email already registered."]}, status=400)
 
     user = User.objects.create_user(
-        username=username, password=password,
-        phone_number=phone_number, email=email,
-        first_name=first_name, last_name=last_name, role=role,
+        username=data["username"],
+        password=data["password"],
+        role=role,
+        phone_number=data["phone_number"],
+        email=data.get("email", ""),
+        first_name=data.get("first_name", ""),
+        last_name=data.get("last_name", ""),
     )
-    tokens = _tokens(user)
-    return Response({**tokens, **_user_data(user, request), "message": "Account created."}, status=201)
+
+    if role == "karigar":
+        KarigarProfile.objects.create(user=user)
+
+    return Response({**_tokens(user), **_user_data(user, request)}, status=201)
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def login_user(request):
     identifier = request.data.get("username", "").strip()
     password   = request.data.get("password", "")
@@ -151,16 +190,20 @@ def login_user(request):
             try:
                 obj = User.objects.get(**{field: identifier})
                 user = authenticate(username=obj.username, password=password)
-                if user: break
+                if user:
+                    break
             except User.DoesNotExist:
                 pass
     if user is None:
         return Response({"error": "Incorrect credentials."}, status=401)
+    if not user.is_active:
+        return Response({"error": "Your account has been suspended. Please contact support."}, status=403)
 
     return Response({**_tokens(user), **_user_data(user, request)})
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def forgot_password(request):
     identifier = request.data.get("identifier", "").strip()
     if not identifier:
@@ -168,7 +211,8 @@ def forgot_password(request):
     user = None
     for field in ("phone_number", "email"):
         try:
-            user = User.objects.get(**{field: identifier}); break
+            user = User.objects.get(**{field: identifier})
+            break
         except User.DoesNotExist:
             pass
     if not user:
@@ -178,27 +222,33 @@ def forgot_password(request):
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def reset_password(request):
     token_str        = request.data.get("reset_token", "").strip()
     new_password     = request.data.get("new_password", "")
     confirm_password = request.data.get("confirm_password", "")
     if not token_str:
         return Response({"error": "Reset token is required."}, status=400)
+    if not new_password:
+        return Response({"error": "New password is required."}, status=400)
     if new_password != confirm_password:
         return Response({"error": "Passwords do not match."}, status=400)
     if len(new_password) < 8:
         return Response({"error": "Password must be at least 8 characters."}, status=400)
     try:
-        token = PasswordResetToken.objects.get(token=token_str, is_used=False)
-    except PasswordResetToken.DoesNotExist:
-        return Response({"error": "Invalid or already used token."}, status=400)
-    if dj_timezone.now() - token.created_at > timedelta(hours=1):
+        import uuid
+        token_obj = PasswordResetToken.objects.get(token=uuid.UUID(token_str), is_used=False)
+    except Exception:
+        return Response({"error": "Invalid or expired token."}, status=400)
+    from datetime import timedelta
+    if dj_timezone.now() - token_obj.created_at > timedelta(hours=1):
         return Response({"error": "Token has expired."}, status=400)
-    token.user.set_password(new_password)
-    token.user.save()
-    token.is_used = True
-    token.save()
-    return Response({"message": "Password updated."})
+    user = token_obj.user
+    user.set_password(new_password)
+    user.save()
+    token_obj.is_used = True
+    token_obj.save()
+    return Response({"message": "Password reset successful."})
 
 
 @api_view(["GET"])
@@ -207,298 +257,174 @@ def get_profile(request):
     return Response(_user_data(request.user, request))
 
 
-@api_view(["PATCH"])
+@api_view(["PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def update_profile(request):
     user = request.user
+    data = request.data
     for field in ("first_name", "last_name", "email", "bio", "address"):
-        val = request.data.get(field)
-        if val is not None:
-            setattr(user, field, val)
-    phone = request.data.get("phone_number")
-    if phone and phone != user.phone_number:
-        if User.objects.filter(phone_number=phone).exclude(pk=user.pk).exists():
-            return Response({"error": "Phone number already in use."}, status=400)
-        user.phone_number = phone
-    if "profile_image" in request.FILES:
-        user.profile_image = request.FILES["profile_image"]
+        if field in data:
+            setattr(user, field, data[field])
     user.save()
     return Response(_user_data(user, request))
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+def upload_profile_image(request):
+    img = request.FILES.get("profile_image")
+    if not img:
+        return Response({"error": "No image provided."}, status=400)
+    request.user.profile_image = img
+    request.user.save()
+    return Response(_user_data(request.user, request))
+
+
+# ── Change Password ────────────────────────────────────────────────────────────
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def change_password(request):
-    user             = request.user
-    old_password     = request.data.get("old_password", "")
-    new_password     = request.data.get("new_password", "")
-    confirm_password = request.data.get("confirm_password", "")
-    if not user.check_password(old_password):
+    """
+    POST /api/accounts/change-password/
+    Body: { current_password, new_password }
+    """
+    current = request.data.get("current_password", "")
+    new_pw  = request.data.get("new_password", "")
+    if not current or not new_pw:
+        return Response({"error": "Both current and new password are required."}, status=400)
+    if len(new_pw) < 8:
+        return Response({"error": "New password must be at least 8 characters."}, status=400)
+    if not request.user.check_password(current):
         return Response({"error": "Current password is incorrect."}, status=400)
-    if new_password != confirm_password:
-        return Response({"error": "Passwords do not match."}, status=400)
-    if len(new_password) < 8:
-        return Response({"error": "Password must be at least 8 characters."}, status=400)
-    user.set_password(new_password)
-    user.save()
-    return Response({**_tokens(user), "message": "Password changed."})
+    if current == new_pw:
+        return Response({"error": "New password must be different from current password."}, status=400)
+    request.user.set_password(new_pw)
+    request.user.save()
+    return Response({"message": "Password changed successfully."})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  SPRINT 2 — 3.2 SERVICE CATEGORIES & SUB-SERVICES
+#  SPRINT 2 — CATEGORIES & KARIGAR
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def list_categories(request):
-    """
-    GET /api/accounts/categories/
-    Returns all active service categories with their sub-services.
-    """
-    cats = ServiceCategory.objects.filter(is_active=True)
-    data = []
-    for c in cats:
-        subs = list(c.sub_services.filter(is_active=True).values(
-            "id", "name", "description", "base_price"
-        ))
-        # Convert Decimal to string for JSON
-        for s in subs:
-            s["base_price"] = str(s["base_price"]) if s["base_price"] else ""
-        data.append({
-            "id":           c.id,
-            "name":         c.name,
-            "description":  c.description or "",
-            "icon":         c.icon or "",
-            "sub_services": subs,
-            "karigar_count": c.karigars.filter(available=True).count(),
+    cats = ServiceCategory.objects.filter(is_active=True).prefetch_related(
+        "sub_services"
+    ).order_by("name")
+
+    result = []
+    for cat in cats:
+        active_subs   = cat.sub_services.filter(is_active=True)
+        karigar_count = KarigarProfile.objects.filter(category=cat).count()
+        result.append({
+            "id":            cat.id,
+            "name":          cat.name,
+            "description":   cat.description,
+            "icon":          cat.icon,
+            "karigar_count": karigar_count,
+            "sub_services": [
+                {
+                    "id":         s.id,
+                    "name":       s.name,
+                    "base_price": str(s.base_price) if s.base_price else "",
+                }
+                for s in active_subs
+            ],
         })
-    return Response(data)
+    return Response(result)
 
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_category(request, pk):
-    """GET /api/accounts/categories/<pk>/"""
+def list_karigars_by_category(request, category_id):
     try:
-        c = ServiceCategory.objects.get(pk=pk, is_active=True)
+        cat = ServiceCategory.objects.get(pk=category_id, is_active=True)
     except ServiceCategory.DoesNotExist:
         return Response({"error": "Category not found."}, status=404)
-    subs = list(c.sub_services.filter(is_active=True).values(
-        "id", "name", "description", "base_price"
-    ))
-    for s in subs:
-        s["base_price"] = str(s["base_price"]) if s["base_price"] else ""
-    return Response({
-        "id": c.id, "name": c.name,
-        "description": c.description or "",
-        "icon": c.icon or "",
-        "sub_services": subs,
-    })
+    kps = KarigarProfile.objects.filter(
+        category=cat, available=True
+    ).select_related("user", "category")
+    return Response([_karigar_data(kp, request) for kp in kps])
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SPRINT 2 — 3.3 SERVICE PROVIDER MANAGEMENT (Karigar Profile CRUD)
-# ══════════════════════════════════════════════════════════════════════════════
-
-@api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
-def my_karigar_profile(request):
-    """
-    GET  /api/accounts/karigar/profile/  — get own karigar profile
-    POST /api/accounts/karigar/profile/  — create karigar profile (karigar role only)
-    """
-    if request.user.role != "karigar":
-        return Response({"error": "Only karigar accounts can manage a karigar profile."}, status=403)
-
-    if request.method == "GET":
-        try:
-            kp = KarigarProfile.objects.get(user=request.user)
-            return Response(_karigar_data(kp, request))
-        except KarigarProfile.DoesNotExist:
-            return Response({"error": "Karigar profile not created yet."}, status=404)
-
-    # POST — create
-    if KarigarProfile.objects.filter(user=request.user).exists():
-        return Response({"error": "Profile already exists. Use PATCH to update."}, status=400)
-
-    data = request.data
-    category_id = data.get("category_id")
-    category = None
-    if category_id:
-        try:
-            category = ServiceCategory.objects.get(pk=category_id)
-        except ServiceCategory.DoesNotExist:
-            return Response({"error": "Category not found."}, status=400)
-
-    kp = KarigarProfile.objects.create(
-        user=request.user,
-        category=category,
-        experience_years=int(data.get("experience_years", 0)),
-        hourly_rate=data.get("hourly_rate") or None,
-        location=data.get("location", ""),
-        district=data.get("district", ""),
-        available=data.get("available", True),
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def list_karigars(request):
+    return Response(
+        [_karigar_data(kp, request)
+         for kp in KarigarProfile.objects.select_related("user", "category").all()]
     )
-    # Attach sub-services
-    sub_ids = data.get("sub_service_ids", [])
-    if sub_ids:
-        kp.sub_services.set(SubService.objects.filter(id__in=sub_ids))
-
-    return Response(_karigar_data(kp, request), status=201)
 
 
-@api_view(["PATCH"])
-@permission_classes([IsAuthenticated])
-def update_karigar_profile(request):
-    """
-    PATCH /api/accounts/karigar/profile/update/
-    Update own karigar profile fields.
-    """
-    if request.user.role != "karigar":
-        return Response({"error": "Only karigar accounts can update a karigar profile."}, status=403)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def karigar_public_profile(request, pk):
     try:
-        kp = KarigarProfile.objects.get(user=request.user)
+        kp = KarigarProfile.objects.select_related("user", "category").get(pk=pk)
     except KarigarProfile.DoesNotExist:
-        return Response({"error": "Karigar profile not found. Create one first."}, status=404)
-
-    data = request.data
-
-    category_id = data.get("category_id")
-    if category_id:
-        try:
-            kp.category = ServiceCategory.objects.get(pk=category_id)
-        except ServiceCategory.DoesNotExist:
-            return Response({"error": "Category not found."}, status=400)
-
-    for field in ("experience_years", "hourly_rate", "location", "district", "available"):
-        val = data.get(field)
-        if val is not None:
-            setattr(kp, field, val)
-
-    sub_ids = data.get("sub_service_ids")
-    if sub_ids is not None:
-        kp.sub_services.set(SubService.objects.filter(id__in=sub_ids))
-
-    kp.save()
+        return Response({"error": "Karigar not found."}, status=404)
     return Response(_karigar_data(kp, request))
 
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def upload_gallery_image(request):
-    """
-    POST /api/accounts/karigar/gallery/
-    Upload a work portfolio image.
-    """
-    if request.user.role != "karigar":
-        return Response({"error": "Only karigar accounts can upload gallery images."}, status=403)
-    try:
-        kp = KarigarProfile.objects.get(user=request.user)
-    except KarigarProfile.DoesNotExist:
-        return Response({"error": "Create a karigar profile first."}, status=404)
-
-    if "image" not in request.FILES:
-        return Response({"error": "No image file provided."}, status=400)
-
-    img = KarigarGallery.objects.create(
-        karigar=kp,
-        image=request.FILES["image"],
-        caption=request.data.get("caption", ""),
-    )
-    return Response({
-        "id":      img.id,
-        "image":   request.build_absolute_uri(img.image.url),
-        "caption": img.caption,
-    }, status=201)
-
-
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_gallery_image(request, pk):
-    """DELETE /api/accounts/karigar/gallery/<pk>/"""
-    try:
-        img = KarigarGallery.objects.get(pk=pk, karigar__user=request.user)
-    except KarigarGallery.DoesNotExist:
-        return Response({"error": "Image not found."}, status=404)
-    img.image.delete(save=False)
-    img.delete()
-    return Response({"message": "Image deleted."})
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  SPRINT 2 — 3.4 ADVANCED SEARCH & FILTER
-# ══════════════════════════════════════════════════════════════════════════════
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def search_karigars(request):
-    """
-    GET /api/accounts/karigars/search/
-    Query params:
-      q          — name / username / bio keyword
-      category   — ServiceCategory id
-      district   — district name (partial match)
-      available  — true/false
-      min_rate   — minimum hourly rate (NPR)
-      max_rate   — maximum hourly rate (NPR)
-      min_rating — minimum avg rating (0-5)
-      min_exp    — minimum experience years
-      ordering   — rating | jobs | rate_asc | rate_desc | newest
-      page       — page number (default 1)
-      page_size  — results per page (default 12, max 50)
-    """
-    qs = KarigarProfile.objects.select_related('user', 'category') \
-                               .prefetch_related('sub_services', 'gallery')
+    qs = KarigarProfile.objects.select_related("user", "category").prefetch_related("sub_services")
 
-    # keyword
-    q = request.GET.get("q", "").strip()
+    q          = request.query_params.get("q", "").strip()
+    category   = request.query_params.get("category", "")
+    district   = request.query_params.get("district", "").strip()
+    available  = request.query_params.get("available", "")
+    min_rate   = request.query_params.get("min_rate", "")
+    max_rate   = request.query_params.get("max_rate", "")
+    min_rating = request.query_params.get("min_rating", "")
+    min_exp    = request.query_params.get("min_exp", "")
+    ordering   = request.query_params.get("ordering", "rating")
+
     if q:
         qs = qs.filter(
             Q(user__first_name__icontains=q) |
-            Q(user__last_name__icontains=q)  |
-            Q(user__username__icontains=q)   |
-            Q(user__bio__icontains=q)         |
-            Q(location__icontains=q)          |
-            Q(category__name__icontains=q)
-        )
-
-    # category filter
-    category = request.GET.get("category")
+            Q(user__last_name__icontains=q) |
+            Q(user__username__icontains=q) |
+            Q(category__name__icontains=q) |
+            Q(sub_services__name__icontains=q) |
+            Q(district__icontains=q) |
+            Q(location__icontains=q)
+        ).distinct()
     if category:
-        qs = qs.filter(category_id=category)
-
-    # district filter
-    district = request.GET.get("district", "").strip()
+        try:
+            qs = qs.filter(category_id=int(category))
+        except ValueError:
+            pass
     if district:
         qs = qs.filter(district__icontains=district)
-
-    # availability
-    available = request.GET.get("available", "").lower()
     if available == "true":
         qs = qs.filter(available=True)
     elif available == "false":
         qs = qs.filter(available=False)
-
-    # rate range
-    min_rate = request.GET.get("min_rate")
-    max_rate = request.GET.get("max_rate")
     if min_rate:
-        qs = qs.filter(hourly_rate__gte=min_rate)
+        try:
+            qs = qs.filter(hourly_rate__gte=float(min_rate))
+        except ValueError:
+            pass
     if max_rate:
-        qs = qs.filter(hourly_rate__lte=max_rate)
-
-    # rating
-    min_rating = request.GET.get("min_rating")
+        try:
+            qs = qs.filter(hourly_rate__lte=float(max_rate))
+        except ValueError:
+            pass
     if min_rating:
-        qs = qs.filter(avg_rating__gte=min_rating)
-
-    # experience
-    min_exp = request.GET.get("min_exp")
+        try:
+            qs = qs.filter(avg_rating__gte=float(min_rating))
+        except ValueError:
+            pass
     if min_exp:
-        qs = qs.filter(experience_years__gte=min_exp)
+        try:
+            qs = qs.filter(experience_years__gte=int(min_exp))
+        except ValueError:
+            pass
 
-    # ordering
-    ordering = request.GET.get("ordering", "rating")
     ORDER_MAP = {
         "rating":    "-avg_rating",
         "jobs":      "-total_jobs",
@@ -508,393 +434,336 @@ def search_karigars(request):
     }
     qs = qs.order_by(ORDER_MAP.get(ordering, "-avg_rating"))
 
-    # pagination
     try:
-        page      = max(1, int(request.GET.get("page", 1)))
-        page_size = min(50, max(1, int(request.GET.get("page_size", 12))))
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = min(30, max(5, int(request.query_params.get("page_size", 12))))
     except ValueError:
         page, page_size = 1, 12
 
-    total   = qs.count()
-    start   = (page - 1) * page_size
-    results = qs[start: start + page_size]
+    total  = qs.count()
+    start  = (page - 1) * page_size
+    kps    = qs[start: start + page_size]
 
     return Response({
-        "total":     total,
-        "page":      page,
-        "page_size": page_size,
-        "pages":     (total + page_size - 1) // page_size,
-        "results":   [_karigar_data(kp, request) for kp in results],
+        "total":   total,
+        "page":    page,
+        "pages":   (total + page_size - 1) // page_size,
+        "results": [_karigar_data(kp, request) for kp in kps],
     })
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SPRINT 2 — 3.5 WORKER PROFILE PAGE (public view)
-# ══════════════════════════════════════════════════════════════════════════════
-
 @api_view(["GET"])
-@permission_classes([AllowAny])
-def karigar_public_profile(request, pk):
-    """
-    GET /api/accounts/karigars/<pk>/
-    Public karigar profile with reviews.
-    """
+@permission_classes([IsAuthenticated])
+def karigar_dashboard(request):
+    if request.user.role != "karigar":
+        return Response({"error": "Karigar access only."}, status=403)
     try:
-        kp = KarigarProfile.objects.select_related('user', 'category') \
-                                   .prefetch_related('sub_services', 'gallery', 'reviews') \
-                                   .get(pk=pk)
+        kp = KarigarProfile.objects.get(user=request.user)
     except KarigarProfile.DoesNotExist:
-        return Response({"error": "Karigar not found."}, status=404)
-
-    data = _karigar_data(kp, request)
-
-    # Attach reviews
-    reviews = kp.reviews.select_related('user').order_by('-created_at')[:20]
-    data["reviews"] = [
-        {
-            "reviewer":   r.user.get_full_name() or r.user.username,
-            "avatar":     _abs_url(request, r.user.profile_image.url) if r.user.profile_image else None,
-            "rating":     r.rating,
-            "comment":    r.comment,
-            "date":       r.created_at.strftime("%Y-%m-%d"),
-        }
-        for r in reviews
-    ]
-    return Response(data)
+        kp = KarigarProfile.objects.create(user=request.user)
+    return Response(_karigar_data(kp, request))
 
 
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def list_karigars_by_category(request, category_id):
-    """
-    GET /api/accounts/categories/<category_id>/karigars/
-    All available karigars for a given category.
-    """
+@api_view(["PUT", "PATCH"])
+@permission_classes([IsAuthenticated])
+def update_karigar_dashboard(request):
+    if request.user.role != "karigar":
+        return Response({"error": "Karigar access only."}, status=403)
     try:
-        cat = ServiceCategory.objects.get(pk=category_id, is_active=True)
-    except ServiceCategory.DoesNotExist:
-        return Response({"error": "Category not found."}, status=404)
+        kp = KarigarProfile.objects.get(user=request.user)
+    except KarigarProfile.DoesNotExist:
+        kp = KarigarProfile.objects.create(user=request.user)
 
-    qs = KarigarProfile.objects.filter(category=cat, available=True) \
-                               .select_related('user') \
-                               .prefetch_related('sub_services', 'gallery') \
-                               .order_by('-avg_rating')
+    data = request.data
+    for field in ("experience_years", "hourly_rate", "location", "district", "available", "bio"):
+        if field in data:
+            if field == "available":
+                kp.available = str(data[field]).lower() in ("true", "1", "yes")
+            else:
+                setattr(kp, field, data[field])
 
+    for field in ("first_name", "last_name", "bio", "address"):
+        if field in data:
+            setattr(request.user, field, data[field])
+    request.user.save()
+
+    if "category_id" in data:
+        try:
+            cat = ServiceCategory.objects.get(pk=int(data["category_id"]), is_active=True)
+            kp.category = cat
+        except (ServiceCategory.DoesNotExist, ValueError):
+            pass
+
+    if "sub_service_ids" in data:
+        ids = data["sub_service_ids"]
+        if isinstance(ids, str):
+            import json
+            try:
+                ids = json.loads(ids)
+            except Exception:
+                ids = []
+        kp.sub_services.set(SubService.objects.filter(pk__in=ids))
+
+    kp.save()
+    # Re-fetch to get accurate M2M data
+    kp.refresh_from_db()
+    return Response(_karigar_data(kp, request))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def upload_gallery_image(request):
+    if request.user.role != "karigar":
+        return Response({"error": "Karigar access only."}, status=403)
+    img = request.FILES.get("image")
+    if not img:
+        return Response({"error": "No image provided."}, status=400)
+    try:
+        kp = KarigarProfile.objects.get(user=request.user)
+    except KarigarProfile.DoesNotExist:
+        return Response({"error": "Karigar profile not found."}, status=404)
+    g = KarigarGallery.objects.create(
+        karigar=kp, image=img, caption=request.data.get("caption", "")
+    )
     return Response({
-        "category": cat.name,
-        "total":    qs.count(),
-        "results":  [_karigar_data(kp, request) for kp in qs],
-    })
+        "id":      g.id,
+        "image":   _abs_url(request, g.image.url),
+        "caption": g.caption,
+    }, status=201)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_gallery_image(request, pk):
+    if request.user.role != "karigar":
+        return Response({"error": "Karigar access only."}, status=403)
+    try:
+        g = KarigarGallery.objects.get(pk=pk, karigar__user=request.user)
+    except KarigarGallery.DoesNotExist:
+        return Response({"error": "Image not found."}, status=404)
+    g.image.delete(save=False)
+    g.delete()
+    return Response({"message": "Image deleted."})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  SPRINT 3 — BOOKING, CANCELLATION & BARGAINING
+#  SPRINT 3 — BOOKINGS & BARGAINING
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _booking_data(b, request=None):
-    """Serialize a Booking to a dict."""
-    karigar_img = None
-    customer_img = None
-    try:
-        if b.karigar.profile_image:
-            karigar_img = _abs_url(request, b.karigar.profile_image.url)
-    except Exception:
-        pass
-    try:
-        if b.user.profile_image:
-            customer_img = _abs_url(request, b.user.profile_image.url)
-    except Exception:
-        pass
-
-    return {
-        "id":              b.id,
-        "status":          b.status,
-        "bargain_status":  b.bargain_status,
-        # Customer info
-        "customer_id":     b.user.id,
-        "customer_name":   f"{b.user.first_name} {b.user.last_name}".strip() or b.user.username,
-        "customer_username": b.user.username,
-        "customer_image":  customer_img,
-        "customer_phone":  b.user.phone_number,
-        # Karigar info
-        "karigar_id":      b.karigar.id,
-        "karigar_name":    f"{b.karigar.first_name} {b.karigar.last_name}".strip() or b.karigar.username,
-        "karigar_username": b.karigar.username,
-        "karigar_image":   karigar_img,
-        "karigar_phone":   b.karigar.phone_number,
-        # Service info
-        "sub_service_id":  b.sub_service.id   if b.sub_service else None,
-        "sub_service_name":b.sub_service.name if b.sub_service else "",
-        # Booking details
-        "address":         b.address,
-        "date":            str(b.date),
-        "note":            b.note or "",
-        # Rates
-        "karigar_rate":    str(b.karigar_rate)  if b.karigar_rate  else "",
-        "offered_rate":    str(b.offered_rate)  if b.offered_rate  else "",
-        "counter_rate":    str(b.counter_rate)  if b.counter_rate  else "",
-        "final_rate":      str(b.final_rate)    if b.final_rate    else "",
-        "bargain_message": b.bargain_message or "",
-        # Timestamps
-        "created_at":      b.created_at.strftime("%Y-%m-%d %H:%M") if b.created_at else "",
-        "updated_at":      b.updated_at.strftime("%Y-%m-%d %H:%M") if b.updated_at else "",
-    }
-
-
-# ── 3.1 Create Booking ────────────────────────────────────────────────────────
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_booking(request):
-    """
-    POST /api/accounts/bookings/
-    Customer creates a booking request.
-    Body: { karigar_user_id, sub_service_id (opt), address, date, note (opt), offered_rate (opt) }
-    """
     if request.user.role != "customer":
         return Response({"error": "Only customers can create bookings."}, status=403)
 
-    data = request.data
-    karigar_user_id = data.get("karigar_user_id")
-    if not karigar_user_id:
-        return Response({"error": "karigar_user_id is required."}, status=400)
+    karigar_profile_id = request.data.get("karigar_profile_id")
+    sub_service_id     = request.data.get("sub_service_id")
+    address            = request.data.get("address", "").strip()
+    date_str           = request.data.get("date", "")
+    note               = request.data.get("note", "")
+    offered_rate       = request.data.get("offered_rate")
+
+    if not karigar_profile_id:
+        return Response({"error": "karigar_profile_id is required."}, status=400)
+    if not address:
+        return Response({"error": "Address is required."}, status=400)
+    if not date_str:
+        return Response({"error": "Date is required."}, status=400)
 
     try:
-        karigar_user = User.objects.get(pk=karigar_user_id, role="karigar")
-    except User.DoesNotExist:
+        from datetime import date
+        booking_date = date.fromisoformat(date_str)
+    except ValueError:
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD."}, status=400)
+
+    if booking_date < dj_timezone.now().date():
+        return Response({"error": "Booking date cannot be in the past."}, status=400)
+
+    try:
+        kp = KarigarProfile.objects.get(pk=karigar_profile_id)
+    except KarigarProfile.DoesNotExist:
         return Response({"error": "Karigar not found."}, status=404)
 
-    address = data.get("address", "").strip()
-    date    = data.get("date", "")
-    if not address or not date:
-        return Response({"error": "address and date are required."}, status=400)
-
     sub_service = None
-    sub_service_id = data.get("sub_service_id")
     if sub_service_id:
         try:
             sub_service = SubService.objects.get(pk=sub_service_id)
         except SubService.DoesNotExist:
-            return Response({"error": "Sub-service not found."}, status=400)
-
-    # Get karigar's current hourly rate
-    karigar_rate = None
-    try:
-        kp = KarigarProfile.objects.get(user=karigar_user)
-        karigar_rate = kp.hourly_rate
-    except KarigarProfile.DoesNotExist:
-        pass
-
-    offered_rate   = data.get("offered_rate")
-    bargain_status = "none"
-    booking_status = "pending"
-
-    # If customer sends an offered rate different from karigar's rate → bargaining
-    if offered_rate and karigar_rate:
-        try:
-            if float(offered_rate) != float(karigar_rate):
-                bargain_status = "customer_offered"
-                booking_status = "bargaining"
-        except (ValueError, TypeError):
             pass
 
+    bargain_status = "none"
+    if offered_rate:
+        try:
+            offered_rate = float(offered_rate)
+            bargain_status = "customer_offered"
+        except ValueError:
+            offered_rate = None
+
     booking = Booking.objects.create(
-        user          = request.user,
-        karigar       = karigar_user,
-        sub_service   = sub_service,
-        address       = address,
-        date          = date,
-        note          = data.get("note", ""),
-        status        = booking_status,
-        karigar_rate  = karigar_rate,
-        offered_rate  = offered_rate if offered_rate else None,
-        bargain_status= bargain_status,
-        bargain_message = data.get("bargain_message", ""),
+        user=request.user,
+        karigar=kp.user,
+        sub_service=sub_service,
+        address=address,
+        date=booking_date,
+        note=note,
+        status="pending",
+        karigar_rate=kp.hourly_rate,
+        offered_rate=offered_rate if offered_rate else None,
+        bargain_status=bargain_status,
     )
     return Response(_booking_data(booking, request), status=201)
 
 
-# ── 3.2 List Bookings ─────────────────────────────────────────────────────────
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def list_bookings(request):
-    """
-    GET /api/accounts/bookings/
-    Customer sees their own bookings. Karigar sees bookings assigned to them.
-    Query param: status (optional filter)
-    """
-    status_filter = request.GET.get("status", "")
-    if request.user.role == "customer":
-        qs = Booking.objects.filter(user=request.user)
+    user = request.user
+    if user.role == "karigar":
+        qs = Booking.objects.filter(karigar=user).select_related("user", "karigar", "sub_service").order_by("-created_at")
     else:
-        qs = Booking.objects.filter(karigar=request.user)
+        qs = Booking.objects.filter(user=user).select_related("user", "karigar", "sub_service").order_by("-created_at")
 
-    if status_filter:
-        qs = qs.filter(status=status_filter)
+    status = request.query_params.get("status", "")
+    if status:
+        qs = qs.filter(status=status)
 
-    qs = qs.select_related("user", "karigar", "sub_service").order_by("-created_at")
     return Response([_booking_data(b, request) for b in qs])
 
 
-# ── 3.3 Booking Detail ────────────────────────────────────────────────────────
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def booking_detail(request, pk):
-    """GET /api/accounts/bookings/<pk>/"""
     try:
-        b = Booking.objects.select_related("user", "karigar", "sub_service").get(pk=pk)
+        if request.user.role == "karigar":
+            b = Booking.objects.get(pk=pk, karigar=request.user)
+        else:
+            b = Booking.objects.get(pk=pk, user=request.user)
     except Booking.DoesNotExist:
         return Response({"error": "Booking not found."}, status=404)
-
-    if b.user != request.user and b.karigar != request.user:
-        return Response({"error": "Not authorised."}, status=403)
-
     return Response(_booking_data(b, request))
 
 
-# ── 3.4 Cancel Booking (customer only) ───────────────────────────────────────
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def cancel_booking(request, pk):
-    """
-    POST /api/accounts/bookings/<pk>/cancel/
-    Customer cancels a booking. Only allowed if status is pending/bargaining.
-    """
     try:
-        b = Booking.objects.get(pk=pk, user=request.user)
+        if request.user.role == "karigar":
+            b = Booking.objects.get(pk=pk, karigar=request.user)
+        else:
+            b = Booking.objects.get(pk=pk, user=request.user)
     except Booking.DoesNotExist:
         return Response({"error": "Booking not found."}, status=404)
 
-    if b.status not in ("pending", "bargaining"):
-        return Response({"error": f"Cannot cancel a booking with status '{b.status}'."}, status=400)
+    if b.status in ("completed", "cancelled"):
+        return Response({"error": f"Cannot cancel a {b.status} booking."}, status=400)
 
     b.status = "cancelled"
-    b.save()
+    b.save(update_fields=["status", "updated_at"])
     return Response(_booking_data(b, request))
 
 
-# ── 3.5 Karigar: Accept or Reject ────────────────────────────────────────────
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def respond_booking(request, pk):
-    """
-    POST /api/accounts/bookings/<pk>/respond/
-    Karigar accepts or rejects a booking.
-    Body: { action: "accept" | "reject" }
-    """
     if request.user.role != "karigar":
-        return Response({"error": "Only karigars can respond to bookings."}, status=403)
-
+        return Response({"error": "Only karigars can accept/reject bookings."}, status=403)
     try:
         b = Booking.objects.get(pk=pk, karigar=request.user)
     except Booking.DoesNotExist:
         return Response({"error": "Booking not found."}, status=404)
 
-    if b.status not in ("pending", "bargaining"):
-        return Response({"error": f"Cannot respond to a booking with status '{b.status}'."}, status=400)
-
     action = request.data.get("action", "")
+    if action not in ("accept", "reject"):
+        return Response({"error": "action must be 'accept' or 'reject'."}, status=400)
+    if b.status not in ("pending", "bargaining"):
+        return Response({"error": f"Cannot respond to a {b.status} booking."}, status=400)
+
     if action == "accept":
-        b.status     = "accepted"
-        # If a bargaining was ongoing, set final_rate to offered or counter rate
+        b.status = "accepted"
         if b.bargain_status == "customer_offered" and b.offered_rate:
             b.final_rate = b.offered_rate
         elif b.bargain_status == "karigar_countered" and b.counter_rate:
             b.final_rate = b.counter_rate
         else:
             b.final_rate = b.karigar_rate
-        b.bargain_status = "agreed"
-    elif action == "reject":
-        b.status = "rejected"
+        b.bargain_status = "none"
     else:
-        return Response({"error": "action must be 'accept' or 'reject'."}, status=400)
+        b.status = "rejected"
 
     b.save()
     return Response(_booking_data(b, request))
 
 
-# ── 3.6 Bargain: Customer makes an offer ────────────────────────────────────
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def bargain_offer(request, pk):
-    """
-    POST /api/accounts/bookings/<pk>/bargain/offer/
-    Customer sends or updates their offered rate.
-    Body: { offered_rate, message (opt) }
-    """
+    if request.user.role != "customer":
+        return Response({"error": "Only customers can make rate offers."}, status=403)
     try:
         b = Booking.objects.get(pk=pk, user=request.user)
     except Booking.DoesNotExist:
         return Response({"error": "Booking not found."}, status=404)
 
     if b.status not in ("pending", "bargaining"):
-        return Response({"error": "Cannot bargain on this booking."}, status=400)
+        return Response({"error": "Can only bargain on pending/bargaining bookings."}, status=400)
 
-    offered_rate = request.data.get("offered_rate")
+    offered_rate    = request.data.get("offered_rate")
+    bargain_message = request.data.get("message", "")
+
     if not offered_rate:
         return Response({"error": "offered_rate is required."}, status=400)
-
     try:
         offered_rate = float(offered_rate)
         if offered_rate <= 0:
             raise ValueError
-    except (ValueError, TypeError):
-        return Response({"error": "offered_rate must be a positive number."}, status=400)
+    except ValueError:
+        return Response({"error": "Invalid rate."}, status=400)
 
     b.offered_rate    = offered_rate
     b.bargain_status  = "customer_offered"
-    b.bargain_message = request.data.get("message", b.bargain_message or "")
+    b.bargain_message = bargain_message
     b.status          = "bargaining"
     b.save()
     return Response(_booking_data(b, request))
 
 
-# ── 3.7 Bargain: Karigar sends counter-offer ─────────────────────────────────
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def bargain_counter(request, pk):
-    """
-    POST /api/accounts/bookings/<pk>/bargain/counter/
-    Karigar sends a counter-offer rate.
-    Body: { counter_rate, message (opt) }
-    """
     if request.user.role != "karigar":
         return Response({"error": "Only karigars can send counter offers."}, status=403)
-
     try:
         b = Booking.objects.get(pk=pk, karigar=request.user)
     except Booking.DoesNotExist:
         return Response({"error": "Booking not found."}, status=404)
 
-    if b.status not in ("pending", "bargaining"):
-        return Response({"error": "Cannot bargain on this booking."}, status=400)
+    if b.bargain_status != "customer_offered":
+        return Response({"error": "No customer offer to counter."}, status=400)
 
-    counter_rate = request.data.get("counter_rate")
+    counter_rate    = request.data.get("counter_rate")
+    bargain_message = request.data.get("message", "")
+
     if not counter_rate:
         return Response({"error": "counter_rate is required."}, status=400)
-
     try:
         counter_rate = float(counter_rate)
         if counter_rate <= 0:
             raise ValueError
-    except (ValueError, TypeError):
-        return Response({"error": "counter_rate must be a positive number."}, status=400)
+    except ValueError:
+        return Response({"error": "Invalid rate."}, status=400)
 
     b.counter_rate    = counter_rate
     b.bargain_status  = "karigar_countered"
-    b.bargain_message = request.data.get("message", b.bargain_message or "")
-    b.status          = "bargaining"
+    b.bargain_message = bargain_message
     b.save()
     return Response(_booking_data(b, request))
 
 
-# ── 3.8 Bargain: Customer accepts karigar counter ────────────────────────────
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def bargain_accept_counter(request, pk):
-    """
-    POST /api/accounts/bookings/<pk>/bargain/accept/
-    Customer accepts karigar's counter-offer → booking moves to accepted.
-    """
+    if request.user.role != "customer":
+        return Response({"error": "Only customers can accept counter offers."}, status=403)
     try:
         b = Booking.objects.get(pk=pk, user=request.user)
     except Booking.DoesNotExist:
@@ -903,8 +772,561 @@ def bargain_accept_counter(request, pk):
     if b.bargain_status != "karigar_countered":
         return Response({"error": "No counter offer to accept."}, status=400)
 
-    b.final_rate     = b.counter_rate
-    b.bargain_status = "agreed"
-    b.status         = "accepted"
+    b.final_rate    = b.counter_rate
+    b.status        = "accepted"
+    b.bargain_status= "accepted"
     b.save()
     return Response(_booking_data(b, request))
+
+
+# ── Mark Booking as Completed (Karigar) ────────────────────────────────────────
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def mark_booking_complete(request, pk):
+    """
+    POST /api/accounts/bookings/<pk>/complete/
+    Karigar marks an accepted booking as completed — unlocks the review system.
+    """
+    if request.user.role != "karigar":
+        return Response({"error": "Only karigars can mark bookings as completed."}, status=403)
+    try:
+        booking = Booking.objects.get(pk=pk, karigar=request.user)
+    except Booking.DoesNotExist:
+        return Response({"error": "Booking not found."}, status=404)
+
+    if booking.status != "accepted":
+        return Response(
+            {"error": f"Only accepted bookings can be completed. Current status: {booking.status}."},
+            status=400
+        )
+
+    booking.status = "completed"
+    booking.save(update_fields=["status", "updated_at"])
+
+    try:
+        kp = KarigarProfile.objects.get(user=request.user)
+        _recalc_karigar_stats(kp)
+    except KarigarProfile.DoesNotExist:
+        pass
+
+    return Response(_booking_data(booking, request))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SPRINT 4 — ADMIN DASHBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _is_admin(user):
+    return user.is_staff or user.is_superuser
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_stats(request):
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    total_users     = User.objects.count()
+    total_customers = User.objects.filter(role="customer").count()
+    total_karigars  = User.objects.filter(role="karigar").count()
+    verified_kgs    = KarigarProfile.objects.filter(is_verified=True).count()
+    unverified_kgs  = KarigarProfile.objects.filter(is_verified=False).count()
+    available_kgs   = KarigarProfile.objects.filter(available=True).count()
+
+    total_bookings      = Booking.objects.count()
+    pending_bookings    = Booking.objects.filter(status="pending").count()
+    bargaining_bookings = Booking.objects.filter(status="bargaining").count()
+    accepted_bookings   = Booking.objects.filter(status="accepted").count()
+    completed_bookings  = Booking.objects.filter(status="completed").count()
+    rejected_bookings   = Booking.objects.filter(status="rejected").count()
+    cancelled_bookings  = Booking.objects.filter(status="cancelled").count()
+
+    total_categories = ServiceCategory.objects.filter(is_active=True).count()
+    total_reviews    = Review.objects.count()
+
+    from datetime import timedelta
+    week_ago           = dj_timezone.now() - timedelta(days=7)
+    new_users_week     = User.objects.filter(date_joined__gte=week_ago).count()
+    new_bookings_week  = Booking.objects.filter(created_at__gte=week_ago).count()
+
+    return Response({
+        "users": {
+            "total":         total_users,
+            "customers":     total_customers,
+            "karigars":      total_karigars,
+            "new_this_week": new_users_week,
+        },
+        "karigars": {
+            "verified":   verified_kgs,
+            "unverified": unverified_kgs,
+            "available":  available_kgs,
+        },
+        "bookings": {
+            "total":         total_bookings,
+            "pending":       pending_bookings,
+            "bargaining":    bargaining_bookings,
+            "accepted":      accepted_bookings,
+            "completed":     completed_bookings,
+            "rejected":      rejected_bookings,
+            "cancelled":     cancelled_bookings,
+            "new_this_week": new_bookings_week,
+        },
+        "categories": total_categories,
+        "reviews":    total_reviews,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_list_users(request):
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    qs     = User.objects.all().order_by("-date_joined")
+    role   = request.query_params.get("role", "")
+    search = request.query_params.get("search", "").strip()
+
+    if role in ("customer", "karigar"):
+        qs = qs.filter(role=role)
+    if search:
+        qs = qs.filter(
+            Q(username__icontains=search) | Q(first_name__icontains=search) |
+            Q(last_name__icontains=search) | Q(email__icontains=search) |
+            Q(phone_number__icontains=search)
+        )
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = min(50, max(5, int(request.query_params.get("page_size", 15))))
+    except ValueError:
+        page, page_size = 1, 15
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    users = qs[start: start + page_size]
+
+    def _u(u):
+        img   = request.build_absolute_uri(u.profile_image.url) if u.profile_image else None
+        kp_id = None
+        try:
+            kp_id = u.karigar_profile.id
+        except Exception:
+            pass
+        return {
+            "id":                 u.id,
+            "username":           u.username,
+            "full_name":          f"{u.first_name} {u.last_name}".strip() or u.username,
+            "email":              u.email,
+            "phone_number":       u.phone_number,
+            "role":               u.role,
+            "is_active":          u.is_active,
+            "is_staff":           u.is_staff,
+            "date_joined":        u.date_joined.strftime("%Y-%m-%d"),
+            "profile_image":      img,
+            "karigar_profile_id": kp_id,
+        }
+
+    return Response({
+        "count":     total,
+        "page":      page,
+        "pages":     (total + page_size - 1) // page_size,
+        "page_size": page_size,
+        "results":   [_u(u) for u in users],
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def admin_toggle_user_active(request, pk):
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+    if request.user.id == pk:
+        return Response({"error": "Cannot deactivate your own account."}, status=400)
+    try:
+        user = User.objects.get(pk=pk)
+    except User.DoesNotExist:
+        return Response({"error": "User not found."}, status=404)
+    user.is_active = not user.is_active
+    user.save()
+    return Response({
+        "id":        user.id,
+        "username":  user.username,
+        "is_active": user.is_active,
+        "message":   "User activated." if user.is_active else "User banned.",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def admin_verify_karigar(request, pk):
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+    try:
+        kp = KarigarProfile.objects.get(pk=pk)
+    except KarigarProfile.DoesNotExist:
+        return Response({"error": "Karigar profile not found."}, status=404)
+    kp.is_verified = not kp.is_verified
+    kp.save()
+    return Response({
+        "karigar_profile_id": kp.id,
+        "username":    kp.user.username,
+        "is_verified": kp.is_verified,
+        "message":     "Karigar verified." if kp.is_verified else "Verification removed.",
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_list_bookings(request):
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    qs     = Booking.objects.select_related("user", "karigar", "sub_service").order_by("-created_at")
+    status = request.query_params.get("status", "")
+    search = request.query_params.get("search", "").strip()
+
+    if status:
+        qs = qs.filter(status=status)
+    if search:
+        qs = qs.filter(
+            Q(user__username__icontains=search) |
+            Q(karigar__username__icontains=search) |
+            Q(address__icontains=search)
+        )
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = min(50, max(5, int(request.query_params.get("page_size", 15))))
+    except ValueError:
+        page, page_size = 1, 15
+
+    total    = qs.count()
+    start    = (page - 1) * page_size
+    bookings = qs[start: start + page_size]
+
+    def _b(b):
+        return {
+            "id":                b.id,
+            "customer_name":     f"{b.user.first_name} {b.user.last_name}".strip() or b.user.username,
+            "customer_username": b.user.username,
+            "karigar_name":      f"{b.karigar.first_name} {b.karigar.last_name}".strip() or b.karigar.username,
+            "karigar_username":  b.karigar.username,
+            "sub_service_name":  b.sub_service.name if b.sub_service else "General",
+            "address":           b.address,
+            "date":              str(b.date),
+            "status":            b.status,
+            "bargain_status":    b.bargain_status,
+            "karigar_rate":      str(b.karigar_rate)  if b.karigar_rate  else "",
+            "offered_rate":      str(b.offered_rate)  if b.offered_rate  else "",
+            "final_rate":        str(b.final_rate)    if b.final_rate    else "",
+            "created_at":        b.created_at.strftime("%Y-%m-%d") if b.created_at else "",
+        }
+
+    return Response({
+        "count":   total,
+        "page":    page,
+        "pages":   (total + page_size - 1) // page_size,
+        "results": [_b(b) for b in bookings],
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_list_karigars(request):
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    qs       = KarigarProfile.objects.select_related("user", "category").order_by("-user__date_joined")
+    verified = request.query_params.get("verified", "")
+    search   = request.query_params.get("search", "").strip()
+
+    if verified == "true":
+        qs = qs.filter(is_verified=True)
+    elif verified == "false":
+        qs = qs.filter(is_verified=False)
+    if search:
+        qs = qs.filter(
+            Q(user__username__icontains=search) | Q(user__first_name__icontains=search) |
+            Q(user__last_name__icontains=search) | Q(category__name__icontains=search) |
+            Q(district__icontains=search)
+        )
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = min(50, max(5, int(request.query_params.get("page_size", 15))))
+    except ValueError:
+        page, page_size = 1, 15
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    kps   = qs[start: start + page_size]
+
+    def _kp(kp):
+        img = request.build_absolute_uri(kp.user.profile_image.url) if kp.user.profile_image else None
+        return {
+            "karigar_profile_id": kp.id,
+            "user_id":            kp.user.id,
+            "username":           kp.user.username,
+            "full_name":          f"{kp.user.first_name} {kp.user.last_name}".strip() or kp.user.username,
+            "profile_image":      img,
+            "category":           kp.category.name if kp.category else "",
+            "district":           kp.district,
+            "hourly_rate":        str(kp.hourly_rate) if kp.hourly_rate else "",
+            "experience_years":   kp.experience_years,
+            "is_verified":        kp.is_verified,
+            "available":          kp.available,
+            "total_jobs":         kp.total_jobs,
+            "avg_rating":         str(kp.avg_rating),
+            "date_joined":        kp.user.date_joined.strftime("%Y-%m-%d"),
+        }
+
+    return Response({
+        "count":   total,
+        "page":    page,
+        "pages":   (total + page_size - 1) // page_size,
+        "results": [_kp(kp) for kp in kps],
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SPRINT 5 — REVIEWS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _review_data(r, request=None):
+    img = None
+    if r.user.profile_image:
+        img = _abs_url(request, r.user.profile_image.url)
+    return {
+        "id":               r.id,
+        "reviewer":         f"{r.user.first_name} {r.user.last_name}".strip() or r.user.username,
+        "reviewer_username": r.user.username,
+        "avatar":           img,
+        "rating":           r.rating,
+        "comment":          r.comment,
+        "date":             r.created_at.strftime("%Y-%m-%d") if r.created_at else "",
+        "booking_id":       r.booking.id,
+    }
+
+
+def _recalc_karigar_stats(kp):
+    """Recalculate avg_rating and total_jobs after any review change."""
+    reviews = Review.objects.filter(karigar=kp.user)
+    count   = reviews.count()
+    if count > 0:
+        total = sum(r.rating for r in reviews)
+        kp.avg_rating = round(total / count, 2)
+    else:
+        kp.avg_rating = 0.00
+    kp.total_jobs = Booking.objects.filter(karigar=kp.user, status="completed").count()
+    kp.save(update_fields=["avg_rating", "total_jobs"])
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_review(request, booking_id):
+    """
+    POST /api/accounts/bookings/<booking_id>/review/
+    Customer submits a review for a completed booking.
+    """
+    if request.user.role != "customer":
+        return Response({"error": "Only customers can submit reviews."}, status=403)
+
+    try:
+        booking = Booking.objects.get(pk=booking_id, user=request.user)
+    except Booking.DoesNotExist:
+        return Response({"error": "Booking not found."}, status=404)
+
+    if booking.status != "completed":
+        return Response({"error": "You can only review completed bookings."}, status=400)
+
+    if Review.objects.filter(booking=booking).exists():
+        return Response({"error": "You have already reviewed this booking."}, status=400)
+
+    rating  = request.data.get("rating")
+    comment = request.data.get("comment", "").strip()
+
+    if rating is None:
+        return Response({"error": "Rating is required."}, status=400)
+    try:
+        rating = int(rating)
+        if rating < 1 or rating > 5:
+            raise ValueError
+    except ValueError:
+        return Response({"error": "Rating must be between 1 and 5."}, status=400)
+
+    review = Review.objects.create(
+        user=request.user,
+        karigar=booking.karigar,
+        booking=booking,
+        rating=rating,
+        comment=comment,
+    )
+
+    try:
+        kp = KarigarProfile.objects.get(user=booking.karigar)
+        _recalc_karigar_stats(kp)
+    except KarigarProfile.DoesNotExist:
+        pass
+
+    return Response(_review_data(review, request), status=201)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def list_karigar_reviews(request, karigar_profile_id):
+    """
+    GET /api/accounts/karigars/<karigar_profile_id>/reviews/?page=
+    Returns paginated reviews + rating summary for a karigar.
+    """
+    try:
+        kp = KarigarProfile.objects.get(pk=karigar_profile_id)
+    except KarigarProfile.DoesNotExist:
+        return Response({"error": "Karigar not found."}, status=404)
+
+    reviews = Review.objects.filter(karigar=kp.user).select_related("user").order_by("-created_at")
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = 10
+    except ValueError:
+        page = 1
+
+    total  = reviews.count()
+    start  = (page - 1) * page_size
+    paged  = reviews[start: start + page_size]
+
+    distribution = {str(i): reviews.filter(rating=i).count() for i in range(1, 6)}
+
+    return Response({
+        "count":        total,
+        "page":         page,
+        "pages":        (total + page_size - 1) // page_size,
+        "avg_rating":   str(kp.avg_rating),
+        "total_jobs":   kp.total_jobs,
+        "distribution": distribution,
+        "results":      [_review_data(r, request) for r in paged],
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def check_reviewable(request, booking_id):
+    """
+    GET /api/accounts/bookings/<booking_id>/reviewable/
+    Returns whether the booking can receive a review.
+    """
+    try:
+        booking = Booking.objects.get(pk=booking_id, user=request.user)
+    except Booking.DoesNotExist:
+        return Response({"error": "Booking not found."}, status=404)
+
+    already_reviewed = Review.objects.filter(booking=booking).exists()
+    return Response({
+        "booking_id":  booking.id,
+        "can_review":  booking.status == "completed" and not already_reviewed,
+        "status":      booking.status,
+        "has_review":  already_reviewed,
+    })
+
+
+@api_view(["PUT", "PATCH"])
+@permission_classes([IsAuthenticated])
+def edit_review(request, review_id):
+    """
+    PUT /api/accounts/reviews/<review_id>/
+    Customer edits their own review.
+    """
+    try:
+        review = Review.objects.get(pk=review_id, user=request.user)
+    except Review.DoesNotExist:
+        return Response({"error": "Review not found."}, status=404)
+
+    rating  = request.data.get("rating")
+    comment = request.data.get("comment", review.comment).strip()
+
+    if rating is not None:
+        try:
+            rating = int(rating)
+            if rating < 1 or rating > 5:
+                raise ValueError
+        except ValueError:
+            return Response({"error": "Rating must be between 1 and 5."}, status=400)
+        review.rating = rating
+
+    review.comment = comment
+    review.save()
+
+    try:
+        kp = KarigarProfile.objects.get(user=review.karigar)
+        _recalc_karigar_stats(kp)
+    except KarigarProfile.DoesNotExist:
+        pass
+
+    return Response(_review_data(review, request))
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_review(request, review_id):
+    """
+    DELETE /api/accounts/reviews/<review_id>/delete/
+    Customer deletes their own review.
+    """
+    try:
+        review = Review.objects.get(pk=review_id, user=request.user)
+    except Review.DoesNotExist:
+        return Response({"error": "Review not found."}, status=404)
+
+    karigar = review.karigar
+    review.delete()
+
+    try:
+        kp = KarigarProfile.objects.get(user=karigar)
+        _recalc_karigar_stats(kp)
+    except KarigarProfile.DoesNotExist:
+        pass
+
+    return Response({"message": "Review deleted."})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  IMPROVEMENTS — Notifications
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_notifications(request):
+    """
+    GET /api/accounts/notifications/
+    Returns last 72 hours of activity relevant to the current user.
+    Used by NotificationBell (30-second polling).
+    """
+    from datetime import timedelta
+    user   = request.user
+    cutoff = dj_timezone.now() - timedelta(hours=72)
+    notifs = []
+
+    if user.role == "customer":
+        bookings = Booking.objects.filter(user=user, updated_at__gte=cutoff).order_by("-updated_at")[:20]
+        for b in bookings:
+            kname = f"{b.karigar.first_name} {b.karigar.last_name}".strip() or b.karigar.username
+            if b.status == "accepted":
+                notifs.append({"id": f"b{b.id}_accepted",  "type": "success", "msg": f"{kname} accepted your booking.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+            elif b.status == "rejected":
+                notifs.append({"id": f"b{b.id}_rejected",  "type": "error",   "msg": f"{kname} declined your booking.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+            elif b.status == "completed":
+                notifs.append({"id": f"b{b.id}_completed", "type": "info",    "msg": f"Job with {kname} is complete. Leave a review!", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+            elif b.bargain_status == "karigar_countered":
+                notifs.append({"id": f"b{b.id}_counter",   "type": "bargain", "msg": f"{kname} sent a counter offer.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+    else:
+        bookings = Booking.objects.filter(karigar=user, updated_at__gte=cutoff).order_by("-updated_at")[:20]
+        for b in bookings:
+            cname = f"{b.user.first_name} {b.user.last_name}".strip() or b.user.username
+            if b.status == "pending" and b.bargain_status == "none":
+                notifs.append({"id": f"b{b.id}_new",       "type": "info",    "msg": f"New booking request from {cname}.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+            elif b.bargain_status == "customer_offered":
+                notifs.append({"id": f"b{b.id}_offer",     "type": "bargain", "msg": f"{cname} sent a rate offer.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+            elif b.status == "cancelled":
+                notifs.append({"id": f"b{b.id}_cancelled", "type": "error",   "msg": f"{cname} cancelled their booking.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+
+    return Response({"count": len(notifs), "results": notifs})

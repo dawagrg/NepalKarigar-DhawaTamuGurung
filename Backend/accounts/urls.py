@@ -1,50 +1,61 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
 
 urlpatterns = [
 
-    # ── Sprint 1: Auth ────────────────────────────────────────────────────────
-    path("register/",                views.register_user,          name="register"),
-    path("login/",                   views.login_user,             name="login"),
-    path("token/refresh/",           TokenRefreshView.as_view(),   name="token_refresh"),
-    path("forgot-password/",         views.forgot_password,        name="forgot_password"),
-    path("reset-password/",          views.reset_password,         name="reset_password"),
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    path("register/",              views.register_user,          name="register"),
+    path("login/",                 views.login_user,             name="login"),
+    path("password-reset/request/",views.forgot_password,        name="forgot_password"),
+    path("password-reset/confirm/",views.reset_password,         name="reset_password"),
 
-    # ── Sprint 1: Profile ─────────────────────────────────────────────────────
-    path("profile/",                 views.get_profile,            name="profile"),
-    path("profile/update/",          views.update_profile,         name="profile_update"),
-    path("profile/change-password/", views.change_password,        name="change_password"),
+    # ── Profile ───────────────────────────────────────────────────────────────
+    path("profile/",               views.get_profile,            name="profile"),
+    path("profile/update/",        views.update_profile,         name="profile_update"),
+    path("profile/upload-image/",  views.upload_profile_image,   name="upload_profile_image"),
+    path("change-password/",       views.change_password,        name="change_password"),
 
-    # ── Sprint 2: Service Categories ──────────────────────────────────────────
-    path("categories/",              views.list_categories,        name="categories"),
-    path("categories/<int:pk>/",     views.get_category,           name="category_detail"),
-    path("categories/<int:category_id>/karigars/",
-                                     views.list_karigars_by_category,
-                                     name="karigars_by_category"),
+    # ── Categories & Karigar Search ───────────────────────────────────────────
+    path("categories/",            views.list_categories,        name="categories"),
+    path("karigars/",              views.list_karigars,          name="karigars"),
+    path("karigars/search/",       views.search_karigars,        name="search_karigars"),
+    path("karigars/<int:pk>/",     views.karigar_public_profile, name="karigar_profile"),
+    path("karigars/<int:karigar_profile_id>/reviews/", views.list_karigar_reviews, name="karigar_reviews"),
+    path("categories/<int:category_id>/karigars/", views.list_karigars_by_category, name="karigars_by_category"),
 
-    # ── Sprint 2: Karigar Profile Management ─────────────────────────────────
-    path("karigar/profile/",         views.my_karigar_profile,     name="my_karigar_profile"),
-    path("karigar/profile/update/",  views.update_karigar_profile, name="karigar_profile_update"),
-    path("karigar/gallery/",         views.upload_gallery_image,   name="gallery_upload"),
-    path("karigar/gallery/<int:pk>/",views.delete_gallery_image,   name="gallery_delete"),
+    # ── Karigar Dashboard ─────────────────────────────────────────────────────
+    path("karigar-dashboard/",              views.karigar_dashboard,        name="karigar_dashboard"),
+    path("karigar-dashboard/update/",       views.update_karigar_dashboard, name="karigar_dashboard_update"),
+    path("karigar-dashboard/gallery/upload/", views.upload_gallery_image,   name="gallery_upload"),
+    path("karigar-dashboard/gallery/<int:pk>/delete/", views.delete_gallery_image, name="gallery_delete"),
 
-    # ── Sprint 2: Search & Public Profile ────────────────────────────────────
-    path("karigars/search/",         views.search_karigars,        name="karigars_search"),
-    path("karigars/<int:pk>/",       views.karigar_public_profile, name="karigar_public"),
+    # ── Bookings ──────────────────────────────────────────────────────────────
+    path("bookings/",                  views.create_booking,         name="create_booking"),
+    path("bookings/list/",             views.list_bookings,          name="list_bookings"),
+    path("bookings/<int:pk>/",         views.booking_detail,         name="booking_detail"),
+    path("bookings/<int:pk>/cancel/",  views.cancel_booking,         name="cancel_booking"),
+    path("bookings/<int:pk>/respond/", views.respond_booking,        name="respond_booking"),
+    path("bookings/<int:pk>/complete/",views.mark_booking_complete,  name="mark_complete"),
 
-    # ── Sprint 3: Booking ─────────────────────────────────────────────────────
-    path("bookings/",                views.create_booking,         name="booking_create"),
-    path("bookings/list/",           views.list_bookings,          name="booking_list"),
-    path("bookings/<int:pk>/",       views.booking_detail,         name="booking_detail"),
-    path("bookings/<int:pk>/cancel/",views.cancel_booking,         name="booking_cancel"),
-    path("bookings/<int:pk>/respond/",views.respond_booking,       name="booking_respond"),
+    # ── Bargaining ────────────────────────────────────────────────────────────
+    path("bookings/<int:pk>/bargain/offer/",   views.bargain_offer,          name="bargain_offer"),
+    path("bookings/<int:pk>/bargain/counter/", views.bargain_counter,        name="bargain_counter"),
+    path("bookings/<int:pk>/bargain/accept/",  views.bargain_accept_counter, name="bargain_accept"),
 
-    # ── Sprint 3: Bargaining ──────────────────────────────────────────────────
-    path("bookings/<int:pk>/bargain/offer/",
-                                     views.bargain_offer,          name="bargain_offer"),
-    path("bookings/<int:pk>/bargain/counter/",
-                                     views.bargain_counter,        name="bargain_counter"),
-    path("bookings/<int:pk>/bargain/accept/",
-                                     views.bargain_accept_counter, name="bargain_accept"),
+    # ── Reviews ───────────────────────────────────────────────────────────────
+    path("bookings/<int:booking_id>/review/",     views.submit_review,   name="submit_review"),
+    path("bookings/<int:booking_id>/reviewable/", views.check_reviewable,name="check_reviewable"),
+    path("reviews/<int:review_id>/",              views.edit_review,     name="edit_review"),
+    path("reviews/<int:review_id>/delete/",       views.delete_review,   name="delete_review"),
+
+    # ── Notifications ─────────────────────────────────────────────────────────
+    path("notifications/",             views.get_notifications,      name="notifications"),
+
+    # ── Admin ─────────────────────────────────────────────────────────────────
+    path("admin/stats/",                         views.admin_stats,              name="admin_stats"),
+    path("admin/users/",                         views.admin_list_users,         name="admin_users"),
+    path("admin/users/<int:pk>/toggle-active/",  views.admin_toggle_user_active, name="admin_toggle_user"),
+    path("admin/karigars/",                      views.admin_list_karigars,      name="admin_karigars"),
+    path("admin/karigars/<int:pk>/verify/",      views.admin_verify_karigar,     name="admin_verify"),
+    path("admin/bookings/",                      views.admin_list_bookings,      name="admin_bookings"),
 ]
