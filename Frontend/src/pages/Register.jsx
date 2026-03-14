@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { IUser, IPhone, IMail, ILock, IEye, IEyeOff, IAlertCirc, ICheckCirc, IWrench } from "./Icons";
+import { IUser, IPhone, IMail, ILock, IEye, IEyeOff, IAlertCirc, ICheckCirc, IWrench } from "../components/Icons";
 import { registerUser } from "../services/api";
+import { isValidNepalPhone, passwordStrength, PW_STRENGTH_COLOR, PW_STRENGTH_LABEL } from "../utils";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -25,7 +26,9 @@ export default function Register() {
     if (!form.first_name.trim())   return "First name is required.";
     if (!form.last_name.trim())    return "Last name is required.";
     if (!form.phone_number.trim()) return "Phone number is required.";
+    if (!isValidNepalPhone(form.phone_number)) return "Enter a valid Nepal phone number (e.g. 98XXXXXXXX).";
     if (!form.email.trim())        return "Email address is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "Enter a valid email address.";
     if (!form.role)                return "Please select a role.";
     if (!form.password)            return "Password is required.";
     if (form.password.length < 8)  return "Password must be at least 8 characters.";
@@ -73,10 +76,9 @@ export default function Register() {
   };
 
   /* password strength */
-  const len   = form.password.length;
-  const str   = len === 0 ? 0 : len < 6 ? 1 : len < 10 ? 2 : len < 14 ? 3 : 4;
-  const strClr = ["", "#DC2626", "#D97706", "#16A34A", "#2563EB"][str];
-  const strTxt = ["", "Weak", "Fair", "Good", "Strong"][str];
+  const str    = passwordStrength(form.password);
+  const strClr = PW_STRENGTH_COLOR[str];
+  const strTxt = PW_STRENGTH_LABEL[str];
 
   return (
     <div className="auth-page">
@@ -118,7 +120,7 @@ export default function Register() {
                 <input
                   type="text"
                   className="field pl"
-                  placeholder="Nishan"
+                  placeholder="John"
                   value={form.first_name}
                   onChange={e => set("first_name", e.target.value)}
                   autoComplete="given-name"
@@ -132,7 +134,7 @@ export default function Register() {
               <input
                 type="text"
                 className="field"
-                placeholder="Gurung"
+                placeholder="Doe"
                 value={form.last_name}
                 onChange={e => set("last_name", e.target.value)}
                 autoComplete="family-name"
@@ -156,6 +158,13 @@ export default function Register() {
               />
             </div>
           </div>
+
+          {/* Phone hint */}
+          {form.phone_number && !isValidNepalPhone(form.phone_number) && (
+            <p style={{ fontSize:11, color:"#DC2626", marginTop:-8, marginBottom:4, display:"flex", alignItems:"center", gap:4 }}>
+              ⚠ Enter a valid Nepal number (97/98/96XXXXXXXX)
+            </p>
+          )}
 
           {/* Email */}
           <div>
@@ -184,7 +193,7 @@ export default function Register() {
             >
               <option value="" disabled>Select your role…</option>
               <option value="customer">Customer — I want to hire workers</option>
-              <option value="karigar">Karigar — I want to offer my skills</option>
+              <option value="karigar">Worker — I want to offer my skills</option>
             </select>
           </div>
 

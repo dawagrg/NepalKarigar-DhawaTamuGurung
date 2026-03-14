@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { IUser, ILock, IEye, IEyeOff, IAlertCirc, IWrench } from "./Icons";
+import { IUser, ILock, IEye, IEyeOff, IAlertCirc, IWrench } from "../components/Icons";
 import { loginUser } from "../services/api";
 
 export default function Login() {
@@ -23,6 +23,7 @@ export default function Login() {
       localStorage.setItem("username",      d.username);
       localStorage.setItem("user_id",       d.user_id);
       localStorage.setItem("role",          d.role || "customer");
+      localStorage.setItem("is_staff",      d.is_staff ? "true" : "false");
       navigate("/");
     } catch (err) {
       setErr(err.response?.data?.error || "Incorrect phone/email or password.");

@@ -2,9 +2,93 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   listBookings, cancelBooking, respondBooking,
-  bargainOffer, bargainCounter, bargainAcceptCounter
+  bargainOffer, bargainCounter, bargainAcceptCounter,
+  submitReview, markBookingComplete,
 } from "../services/api";
 import { ICheckCirc, IAlertCirc, IUser } from "../components/Icons";
+import { BookingCardSkeleton, EmptyState } from "../components/Skeleton";
+import { formatNPR } from "../utils";
+
+function Stars({ rating, size = 14, interactive = false, onRate }) {
+  const [hover, setHover] = useState(0);
+  const r = parseFloat(rating) || 0;
+  const display = interactive ? (hover || r) : r;
+  return (
+    <span style={{ display: "inline-flex", gap: 2 }}>
+      {[1,2,3,4,5].map(i => (
+        <svg key={i} width={size} height={size} viewBox="0 0 24 24"
+          fill={i <= Math.round(display) ? "#F59E0B" : "none"}
+          stroke={i <= Math.round(display) ? "#F59E0B" : "#D1D5DB"} strokeWidth="2"
+          style={{ cursor: interactive ? "pointer" : "default" }}
+          onClick={() => interactive && onRate && onRate(i)}
+          onMouseEnter={() => interactive && setHover(i)}
+          onMouseLeave={() => interactive && setHover(0)}>
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      ))}
+    </span>
+  );
+}
+
+function InlineReviewForm({ booking, onDone, onCancel }) {
+  const [rating,  setRating]  = useState(0);
+  const [comment, setComment] = useState("");
+  const [saving,  setSaving]  = useState(false);
+  const [err,     setErr]     = useState("");
+
+  const submit = async () => {
+    setErr("");
+    if (!rating) { setErr("Please select a star rating."); return; }
+    setSaving(true);
+    try {
+      const res = await submitReview(booking.id, { rating, comment: comment.trim() });
+      onDone(res.data);
+    } catch(e) {
+      const d = e.response?.data;
+      const status = e.response?.status;
+      if (status === 401) { setErr("Session expired. Please log in again."); return; }
+      if (status === 400 && d?.error) { setErr(d.error); return; }
+      if (status === 403) { setErr("Only customers can submit reviews."); return; }
+      if (status === 404) { setErr("Booking not found."); return; }
+      const msg = d?.error || d?.detail
+        || (typeof d === "object" && d !== null ? Object.values(d)[0] : null)
+        || "Failed to submit review. Please try again.";
+      setErr(Array.isArray(msg) ? msg[0] : String(msg));
+    }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:10, padding:"14px 16px", marginTop:12 }}>
+      <p style={{ fontSize:13, fontWeight:700, color:"#92400E", marginBottom:10 }}>
+        ⭐ Rate your experience with {booking.karigar_name}
+      </p>
+      {err && <div className="alert alert-err" style={{ marginBottom:8, fontSize:12 }}><IAlertCirc size={12}/> {err}</div>}
+      <div style={{ marginBottom:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <Stars rating={rating} size={24} interactive onRate={setRating}/>
+          {rating > 0 && <span style={{ fontSize:12, fontWeight:600, color:"#92400E" }}>{["","Poor","Fair","Good","Very Good","Excellent"][rating]}</span>}
+        </div>
+      </div>
+      <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={2}
+        placeholder="Share your experience…"
+        style={{ width:"100%", padding:"8px 10px", borderRadius:7, border:"1.5px solid #FDE68A", fontSize:13,
+          outline:"none", resize:"vertical", boxSizing:"border-box", fontFamily:"inherit", background:"#fff", marginBottom:8 }}
+        onFocus={e=>e.target.style.borderColor="#F59E0B"}
+        onBlur={e=>e.target.style.borderColor="#FDE68A"}/>
+      <div style={{ display:"flex", gap:8 }}>
+        <button onClick={submit} disabled={saving}
+          style={{ padding:"7px 16px", borderRadius:7, border:"none", background:"#F59E0B", color:"white",
+            fontWeight:700, fontSize:12, cursor:saving?"not-allowed":"pointer", opacity:saving?0.7:1 }}>
+          {saving ? "Submitting…" : "Submit Review"}
+        </button>
+        <button onClick={onCancel}
+          style={{ padding:"7px 12px", borderRadius:7, border:"1.5px solid var(--border)", background:"#fff",
+            fontWeight:600, fontSize:12, cursor:"pointer", color:"var(--text-s)" }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
 const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/") ? r : "/media/" + r}`;
@@ -52,6 +136,8 @@ export default function MyBookings() {
 
   // Bargain input state per booking
   const [bargainInputs, setBargainInputs] = useState({}); // {id: {rate, msg}}
+  // Review form state per booking
+  const [reviewOpen, setReviewOpen] = useState({}); // {id: bool}
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { navigate("/login"); return; }
@@ -81,6 +167,12 @@ export default function MyBookings() {
     }
   };
 
+  const handleReviewDone = (bookingId, reviewData) => {
+    setBookings(bs => bs.map(b => b.id === bookingId ? { ...b, has_review: true } : b));
+    setReviewOpen(p => ({ ...p, [bookingId]: false }));
+    setMsg(bookingId, "Review submitted! Thank you.");
+  };
+
   const filtered = filter === "all" ? bookings
     : bookings.filter(b => b.status === filter);
 
@@ -95,11 +187,14 @@ export default function MyBookings() {
   ];
 
   if (loading) return (
-    <div style={{ minHeight:"100vh",background:"var(--bg-page)",paddingTop:70,
-      display:"flex",alignItems:"center",justifyContent:"center" }}>
-      <div style={{ width:30,height:30,border:"3px solid var(--border)",borderTopColor:"var(--primary)",
-        borderRadius:"50%",animation:"spin .7s linear infinite" }}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{ minHeight:"100vh",background:"var(--bg-page)",paddingTop:70 }}>
+      <div style={{ maxWidth:860,margin:"0 auto",padding:"28px 20px" }}>
+        <div style={{ height:32,width:200,borderRadius:8,background:"#E5E7EB",marginBottom:22,animation:"skPulse 1.5s ease-in-out infinite" }}/>
+        <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
+          {[1,2,3].map(i=><BookingCardSkeleton key={i}/>)}
+        </div>
+        <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      </div>
     </div>
   );
 
@@ -135,14 +230,14 @@ export default function MyBookings() {
         </div>
 
         {filtered.length === 0 ? (
-          <div className="card" style={{ padding:"56px",textAlign:"center" }}>
-            <div style={{ fontSize:36,marginBottom:10 }}>📋</div>
-            <p style={{ fontSize:15,fontWeight:600,color:"var(--text-h)",marginBottom:4 }}>No bookings found</p>
-            {!isKarigar && (
-              <button className="btn btn-primary btn-sm" style={{ marginTop:10 }} onClick={() => navigate("/search")}>
-                Find a Karigar
-              </button>
-            )}
+          <div className="card" style={{ overflow:"hidden" }}>
+            <EmptyState
+              emoji="📋"
+              title="No bookings found"
+              message={filter !== "all" ? `No ${filter} bookings.` : isKarigar ? "No booking requests yet. Make sure your profile is complete and available." : "You haven't made any bookings yet. Find a karigar to get started."}
+              action={!isKarigar ? "Find a Karigar" : null}
+              onAction={() => navigate("/search")}
+            />
           </div>
         ) : (
           <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
@@ -180,15 +275,15 @@ export default function MyBookings() {
                     <div style={{ textAlign:"right",flexShrink:0 }}>
                       {b.final_rate ? (
                         <div style={{ fontSize:14,fontWeight:700,color:"#16A34A" }}>
-                          NPR {parseFloat(b.final_rate).toLocaleString()}/hr
+                          {formatNPR(b.final_rate,"/hr")}
                         </div>
                       ) : b.offered_rate ? (
                         <div style={{ fontSize:13,fontWeight:600,color:"#7C3AED" }}>
-                          Offer: NPR {parseFloat(b.offered_rate).toLocaleString()}/hr
+                          Offer: {formatNPR(b.offered_rate,"/hr")}
                         </div>
                       ) : b.karigar_rate ? (
                         <div style={{ fontSize:13,fontWeight:600,color:"var(--primary)" }}>
-                          NPR {parseFloat(b.karigar_rate).toLocaleString()}/hr
+                          {formatNPR(b.karigar_rate,"/hr")}
                         </div>
                       ) : null}
                     </div>
@@ -290,6 +385,41 @@ export default function MyBookings() {
                         </div>
                       )}
 
+                      {/* ── REVIEW (Customer, completed bookings) ── */}
+                      {!isKarigar && b.status === "completed" && (
+                        <div style={{ marginTop:4 }}>
+                          {b.has_review ? (
+                            <div style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"7px 14px",
+                              borderRadius:8, background:"#F0FDF4", border:"1px solid #BBF7D0", fontSize:13, fontWeight:600, color:"#16A34A" }}>
+                              <ICheckCirc size={13}/> Review Submitted
+                            </div>
+                          ) : reviewOpen[b.id] ? (
+                            <InlineReviewForm
+                              booking={b}
+                              onDone={(rv) => handleReviewDone(b.id, rv)}
+                              onCancel={() => setReviewOpen(p => ({...p, [b.id]: false}))}/>
+                          ) : (
+                            <button
+                              style={{ padding:"7px 16px", borderRadius:8, border:"1.5px solid #F59E0B",
+                                background:"#FFFBEB", color:"#92400E", fontWeight:700, fontSize:13, cursor:"pointer" }}
+                              onClick={() => setReviewOpen(p => ({...p, [b.id]: true}))}>
+                              ⭐ Leave a Review
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* View Karigar Profile link */}
+                      {!isKarigar && b.karigar_profile_id && (
+                        <div style={{ marginTop:8 }}>
+                          <button onClick={() => navigate(`/karigar/${b.karigar_profile_id}`)}
+                            style={{ padding:"6px 14px", borderRadius:8, border:"1.5px solid var(--border)",
+                              background:"#fff", color:"var(--primary)", fontWeight:600, fontSize:12, cursor:"pointer" }}>
+                            View Karigar Profile
+                          </button>
+                        </div>
+                      )}
+
                       {/* ── KARIGAR ACTIONS ── */}
                       {isKarigar && (
                         <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
@@ -307,6 +437,22 @@ export default function MyBookings() {
                                 onClick={() => { if(confirm("Reject this booking?")) doAction(b.id, ()=>respondBooking(b.id,{action:"reject"}), "Booking rejected."); }}>
                                 ✗ Reject
                               </button>
+                            </div>
+                          )}
+
+                          {/* Mark as Complete */}
+                          {b.status === "accepted" && (
+                            <div style={{ display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
+                              <button
+                                style={{ padding:"8px 18px",borderRadius:8,border:"1.5px solid #2563EB",
+                                  color:"#2563EB",background:"#EFF6FF",cursor:"pointer",fontWeight:700,fontSize:13 }}
+                                onClick={() => {
+                                  if(confirm("Mark this booking as completed? The customer will be able to leave a review."))
+                                    doAction(b.id, ()=>markBookingComplete(b.id), "Booking marked as completed! Customer can now leave a review.");
+                                }}>
+                                ✓ Mark as Completed
+                              </button>
+                              <span style={{ fontSize:12,color:"var(--text-p)" }}>Completed the work?</span>
                             </div>
                           )}
 

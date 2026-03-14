@@ -1,5 +1,7 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { IWrench, ICheckCirc, IShield, IStar, IUser, IArrow } from "../components/Icons";
+import { formatNPR } from "../utils";
 
 const CATEGORIES = [
   { name: "Plumber",      count: "120+", color: "#2563EB", bg: "#EFF6FF" },
@@ -19,15 +21,31 @@ const FEATURES = [
   { Icon: IWrench,    title: "All Skills Covered",  desc: "From plumbing to painting — we have every trade." },
 ];
 
-const STATS = [
-  { value: "12,000+", label: "Verified Workers"  },
-  { value: "50,000+", label: "Jobs Completed"    },
-  { value: "77",      label: "Districts Covered" },
-  { value: "4.9",     label: "Average Rating"    },
-];
-
 export default function Home() {
-  const user = localStorage.getItem("username");
+  const user  = localStorage.getItem("username");
+  const [stats, setStats] = useState([
+    { value: "500+",   label: "Verified Workers"  },
+    { value: "2,000+", label: "Jobs Completed"    },
+    { value: "20+",    label: "Service Types"     },
+    { value: "4.8★",   label: "Average Rating"    },
+  ]);
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/api/accounts/admin/stats/", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        setStats([
+          { value: `${(d.users?.total || 0).toLocaleString()}+`,       label: "Registered Users"   },
+          { value: `${(d.bookings?.total || 0).toLocaleString()}+`,    label: "Bookings Made"      },
+          { value: `${(d.karigars?.verified || 0).toLocaleString()}+`, label: "Verified Karigars"  },
+          { value: `${(d.reviews?.total || 0).toLocaleString()}+`,     label: "Reviews Given"      },
+        ]);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div style={{ background: "white" }}>
@@ -55,7 +73,7 @@ export default function Home() {
 
           {/* Stats */}
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-            {STATS.map(({ value, label }) => (
+            {stats.map(({ value, label }) => (
               <div key={label} style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 10, padding: "12px 18px", textAlign: "center", minWidth: 100 }}>
                 <div style={{ fontWeight: 700, fontSize: 20, color: "#111827" }}>{value}</div>
                 <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>{label}</div>
@@ -145,6 +163,7 @@ export default function Home() {
             <span style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>NepalKarigar</span>
           </div>
           <p style={{ color: "#9CA3AF", fontSize: 13 }}>© 2025 NepalKarigar. Connecting Nepal's skill economy.</p>
+          <Link to="/about" style={{ fontSize: 13, color: "#2563EB", fontWeight: 600, textDecoration: "none" }}>About Us & Contact</Link>
         </div>
       </footer>
     </div>

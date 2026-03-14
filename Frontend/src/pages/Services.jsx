@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCategories } from "../services/api";
 import { ISearch } from "../components/Icons";
+import { EmptyState } from "../components/Skeleton";
+import { formatNPR } from "../utils";
 
 const EMOJI = {
   "Electrical":"⚡","Plumbing":"🔧","Carpentry":"🪚","Painting":"🎨",
   "Cleaning":"🧹","Masonry":"🧱","HVAC":"❄️","Landscaping":"🌿",
-  "Auto Repair":"🚗","Tailoring":"🧵","Welding":"🔩","IT/Tech":"💻",
+  "Auto Repair":"🚗","Tailoring":"🧵","Welding":"🔩","IT/Tech":"💻","IT / Tech":"💻",
 };
 const catEmoji = (name, icon) => icon || EMOJI[name] || "🛠️";
 
@@ -52,15 +54,23 @@ export default function Services() {
         </div>
 
         {loading ? (
-          <div style={{ display:"flex", justifyContent:"center", padding:"60px 0" }}>
-            <div style={{ width:30, height:30, border:"3px solid var(--border)", borderTopColor:"var(--primary)",
-              borderRadius:"50%", animation:"spin .7s linear infinite" }} />
-            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} className="card" style={{ padding:18 }}>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
+                  <div style={{ width:44, height:44, borderRadius:11, background:"#E5E7EB", flexShrink:0, animation:"skPulse 1.5s ease-in-out infinite" }}/>
+                  <div style={{ flex:1 }}>
+                    <div style={{ height:15, width:"55%", background:"#E5E7EB", borderRadius:6, marginBottom:8, animation:"skPulse 1.5s ease-in-out infinite" }}/>
+                    <div style={{ height:11, width:"80%", background:"#E5E7EB", borderRadius:6, animation:"skPulse 1.5s ease-in-out infinite" }}/>
+                  </div>
+                </div>
+                <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="card" style={{ padding:"48px", textAlign:"center" }}>
-            <div style={{ fontSize:34, marginBottom:10 }}>🔍</div>
-            <p style={{ fontSize:15, color:"var(--text-s)" }}>No categories match your search.</p>
+          <div className="card" style={{ overflow:"hidden" }}>
+            <EmptyState emoji="🔍" title="No categories found" message="No categories match your search." action={search ? "Clear Search" : null} onAction={() => setSearch("")}/>
           </div>
         ) : (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
@@ -111,7 +121,7 @@ export default function Services() {
                             <span style={{ fontSize:13, color:"var(--text-b)" }}>{s.name}</span>
                             {s.base_price && (
                               <span style={{ fontSize:12, fontWeight:600, color:"var(--primary)" }}>
-                                NPR {parseFloat(s.base_price).toLocaleString()}
+                                {formatNPR(s.base_price)}
                               </span>
                             )}
                           </div>

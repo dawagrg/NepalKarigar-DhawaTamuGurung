@@ -12,6 +12,9 @@ import KarigarProfile   from "./pages/KarigarProfile";
 import KarigarDashboard from "./pages/KarigarDashboard";
 import BookingPage      from "./pages/BookingPage";
 import MyBookings       from "./pages/MyBookings";
+import AdminDashboard   from "./pages/AdminDashboard";
+import AboutUs          from "./pages/AboutUs";
+import NotFound         from "./pages/NotFound";
 
 const W = ({ children }) => <><Navbar />{children}</>;
 
@@ -27,6 +30,9 @@ function App() {
         <Route path="/karigar-dashboard" element={<W><KarigarDashboard /></W>} />
         <Route path="/booking/new"       element={<W><BookingPage /></W>} />
         <Route path="/my-bookings"       element={<W><MyBookings /></W>} />
+        <Route path="/admin-dashboard"   element={<W><AdminDashboard /></W>} />
+        <Route path="/about"             element={<W><AboutUs /></W>} />
+        <Route path="*"                  element={<NotFound />} />
         <Route path="/login"             element={<Login />} />
         <Route path="/register"          element={<Register />} />
         <Route path="/forgot-password"   element={<ForgotPassword />} />

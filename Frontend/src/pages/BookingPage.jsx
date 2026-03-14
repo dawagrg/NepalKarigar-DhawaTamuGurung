@@ -9,7 +9,8 @@ const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.sta
 export default function BookingPage() {
   const navigate    = useNavigate();
   const [sp]        = useSearchParams();
-  const karigarId   = sp.get("karigar");
+  const karigarId   = sp.get("karigar");   // user_id  → for booking POST
+  const profileId   = sp.get("profile");   // karigar_profile_id → for API fetch
 
   const [kp,       setKp]       = useState(null);
   const [loading,  setLoading]  = useState(true);
@@ -29,8 +30,8 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { navigate("/login"); return; }
-    if (!karigarId) { navigate("/search"); return; }
-    getKarigarPublicProfile(karigarId)
+    if (!profileId) { navigate("/search"); return; }  // profileId is the karigar_profile_id
+    getKarigarPublicProfile(profileId)
       .then(r => { setKp(r.data); setOfferedRate(r.data.hourly_rate || ""); })
       .catch(() => setErr("Could not load karigar details."))
       .finally(() => setLoading(false));
@@ -50,18 +51,22 @@ export default function BookingPage() {
     setSaving(true);
     try {
       const payload = {
-        karigar_user_id: kp.user_id,
+        karigar_profile_id: profileId,   // KarigarProfile PK — what backend expects
         address,
         date,
         note,
-        ...(subServiceId && { sub_service_id: subServiceId }),
+        ...(subServiceId && { sub_service_id: parseInt(subServiceId) }),
         ...(wantBargain && offeredRate && { offered_rate: offeredRate, bargain_message: bargainMsg }),
       };
       const res = await createBooking(payload);
       setBooking(res.data);
       setSuccess(true);
     } catch (e) {
-      setErr(e.response?.data?.error || "Failed to create booking.");
+      const d = e.response?.data;
+      const msg = d?.error || d?.detail || d?.karigar_profile_id?.[0]
+        || (typeof d === "object" ? Object.values(d)[0] : null)
+        || "Failed to create booking. Please try again.";
+      setErr(Array.isArray(msg) ? msg[0] : String(msg));
     } finally {
       setSaving(false);
     }
@@ -147,7 +152,7 @@ export default function BookingPage() {
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:700,fontSize:15,color:"var(--text-h)" }}>{kp.full_name || kp.username}</div>
-              <div style={{ fontSize:12,color:"var(--text-s)" }}>{kp.category_name} {kp.district ? `• ${kp.district}` : ""}</div>
+              <div style={{ fontSize:12,color:"var(--text-s)" }}>{kp.category} {kp.district ? `• ${kp.district}` : ""}</div>
             </div>
             {karigarRate > 0 && (
               <div style={{ textAlign:"right" }}>

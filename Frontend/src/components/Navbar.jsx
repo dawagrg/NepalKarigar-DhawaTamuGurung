@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { IWrench, IUser, IChevDown, ILogOut, ISettings, ICalendar } from "./Icons";
+import { IWrench, IUser, IChevDown, ILogOut, ISettings, ICalendar, IShield } from "./Icons";
+import NotificationBell from "./NotificationBell";
 import { getProfile } from "../services/api";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
@@ -19,6 +20,7 @@ export default function Navbar() {
 
   const [user,   setUser]   = useState(null);
   const [role,   setRole]   = useState(null);
+  const [isStaff, setIsStaff] = useState(false);
   const [avatar, setAvatar] = useState(null); // profile image URL
   const [initials, setInitials] = useState("U");
   const [open,   setOpen]   = useState(false);
@@ -31,6 +33,7 @@ export default function Navbar() {
 
     setUser(uname);
     setRole(localStorage.getItem("role"));
+    setIsStaff(localStorage.getItem("is_staff") === "true");
 
     // Use cached image first for instant display
     const cached = localStorage.getItem("profile_image");
@@ -72,9 +75,9 @@ export default function Navbar() {
   }, [loadProfile]);
 
   const logout = () => {
-    ["access_token","refresh_token","username","user_id","role","profile_image"]
+    ["access_token","refresh_token","username","user_id","role","profile_image","is_staff"]
       .forEach(k => localStorage.removeItem(k));
-    setUser(null); setRole(null); setAvatar(null); setOpen(false);
+    setUser(null); setRole(null); setIsStaff(false); setAvatar(null); setOpen(false);
     navigate("/login");
   };
 
@@ -123,12 +126,15 @@ export default function Navbar() {
         <div style={{ display: "flex", gap: 20, alignItems: "center", flex: 1, paddingLeft: 24 }}>
           {navLink("/services", "Services")}
           {navLink("/search", "Find Karigar")}
+          {navLink("/about", "About Us")}
           {user && role === "karigar" && navLink("/karigar-dashboard", "My Dashboard")}
         </div>
 
         {/* Right side */}
         {user ? (
-          <div ref={dropRef} style={{ position: "relative" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <NotificationBell />
+            <div ref={dropRef} style={{ position: "relative" }}>
             <button
               onClick={() => setOpen(o => !o)}
               style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 10px 5px 7px", background: "#fff", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }}
@@ -172,6 +178,17 @@ export default function Navbar() {
                   onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                   <ICalendar size={14} color="var(--text-s)" /> My Bookings
                 </Link>
+                {isStaff && (
+                  <>
+                    <div style={{ height: 1, background: "#F3F4F6" }} />
+                    <Link to="/admin-dashboard" onClick={() => setOpen(false)}
+                      style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--primary)", fontSize: 13, fontWeight: 700 }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--primary-bg)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <IShield size={14} color="var(--primary)" /> Admin Dashboard
+                    </Link>
+                  </>
+                )}
                 <div style={{ height: 1, background: "#F3F4F6" }} />
                 <button onClick={logout}
                   style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "9px 14px", background: "none", border: "none", color: "var(--danger)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif" }}
@@ -181,6 +198,7 @@ export default function Navbar() {
                 </button>
               </div>
             )}
+          </div>
           </div>
         ) : (
           <div style={{ display: "flex", gap: 8 }}>

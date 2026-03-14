@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { searchKarigars, getCategories } from "../services/api";
 import { ISearch, ICheckCirc } from "../components/Icons";
+import { KarigarCardSkeleton, EmptyState } from "../components/Skeleton";
+import { formatNPR } from "../utils";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
 const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/")?r:"/media/"+r}`;
@@ -27,7 +29,7 @@ function KarigarCard({ k }) {
   const name = k.full_name || k.username;
   return (
     <div className="card" style={{ padding:"18px", cursor:"pointer", transition:"box-shadow .2s" }}
-      onClick={() => navigate(`/karigar/${k.id}`)}
+      onClick={() => navigate(`/karigar/${k.karigar_profile_id}`)}
       onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 20px rgba(37,99,235,.12)"}
       onMouseLeave={e=>e.currentTarget.style.boxShadow=""}>
       <div style={{ display:"flex", gap:12, marginBottom:11 }}>
@@ -61,7 +63,7 @@ function KarigarCard({ k }) {
       <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:10 }}>
         {k.district && <span style={{ fontSize:12,color:"var(--text-s)" }}>📍 {k.district}</span>}
         {k.experience_years>0 && <span style={{ fontSize:12,color:"var(--text-s)" }}>🗓️ {k.experience_years} yr{k.experience_years!==1?"s":""}</span>}
-        {k.hourly_rate && <span style={{ fontSize:12,color:"var(--primary)",fontWeight:600 }}>NPR {parseFloat(k.hourly_rate).toLocaleString()}/hr</span>}
+        {k.hourly_rate && <span style={{ fontSize:12,color:"var(--primary)",fontWeight:600 }}>{formatNPR(k.hourly_rate,"/hr")}</span>}
         <span style={{ fontSize:11,fontWeight:600,marginLeft:"auto",
           color:k.available?"#16A34A":"var(--text-p)",background:k.available?"#F0FDF4":"var(--bg-subtle)",
           border:`1px solid ${k.available?"#BBF7D0":"var(--border)"}`,borderRadius:20,padding:"1px 8px" }}>
@@ -99,6 +101,8 @@ export default function Search() {
   const [order,    setOrder]    = useState(sp.get("ordering")||"rating");
   const [page,     setPage]     = useState(parseInt(sp.get("page")||"1"));
 
+  const debounceRef = useRef(null);
+
   useEffect(() => { getCategories().then(r=>setCats(r.data)).catch(()=>{}); }, []);
 
   const run = useCallback((pg=1) => {
@@ -121,6 +125,13 @@ export default function Search() {
   }, [q,category,district,avail,minRate,maxRate,minRat,minExp,order]);
 
   useEffect(()=>{ run(page); }, []); // eslint-disable-line
+
+  // Debounce search on text input
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { run(1); }, 350);
+    return () => clearTimeout(debounceRef.current);
+  }, [q]); // eslint-disable-line
 
   const handleSubmit = e => { e?.preventDefault(); setPage(1); run(1); };
 
@@ -246,21 +257,24 @@ export default function Search() {
 
         {/* Grid */}
         {loading?(
-          <div style={{ display:"flex",justifyContent:"center",padding:"60px 0" }}>
-            <div style={{ width:30,height:30,border:"3px solid var(--border)",borderTopColor:"var(--primary)",
-              borderRadius:"50%",animation:"spin .7s linear infinite" }}/>
-            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14 }}>
+            {[1,2,3,4,5,6].map(i=><KarigarCardSkeleton key={i}/>)}
+            <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
           </div>
         ):results.length===0?(
-          <div className="card" style={{ padding:"56px",textAlign:"center" }}>
-            <div style={{ fontSize:36,marginBottom:10 }}>🔍</div>
-            <p style={{ fontSize:15,fontWeight:600,color:"var(--text-h)",marginBottom:4 }}>No karigars found</p>
-            <p style={{ fontSize:13,color:"var(--text-s)" }}>Try different keywords or clear filters.</p>
+          <div className="card" style={{ overflow:"hidden" }}>
+            <EmptyState
+              emoji="🔍"
+              title="No karigars found"
+              message="Try different keywords, adjust filters, or search in a different district."
+              action={activeFilt > 0 ? "Clear Filters" : null}
+              onAction={clearAll}
+            />
           </div>
         ):(
           <>
             <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14 }}>
-              {results.map(k=><KarigarCard key={k.id} k={k}/>)}
+              {results.map(k=><KarigarCard key={k.karigar_profile_id} k={k}/>)}
             </div>
             {meta.pages>1&&(
               <div style={{ display:"flex",justifyContent:"center",gap:6,marginTop:26 }}>

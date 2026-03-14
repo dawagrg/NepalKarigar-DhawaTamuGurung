@@ -67,7 +67,7 @@ export default function KarigarDashboard() {
         setAvail(d.available !== false);
         setGallery(d.gallery||[]);
       })
-      .catch(e => { if (e.response?.status !== 404) setErr("Failed to load profile."); })
+      .catch(e => { setErr("Failed to load profile. Make sure the backend is running."); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -78,24 +78,30 @@ export default function KarigarDashboard() {
   );
 
   const buildPayload = () => ({
-    category_id:      catId || undefined,
-    sub_service_ids:  subIds,
+    category_id:      catId ? parseInt(catId) : undefined,
+    sub_service_ids:  JSON.stringify(subIds),
     experience_years: parseInt(expYears)||0,
     hourly_rate:      rate || undefined,
-    location, district,
-    available,
+    location:         location.trim(),
+    district:         district.trim(),
+    available:        available ? "true" : "false",
   });
 
   const save = async () => {
     setSaving(true); setErr(""); setMsg("");
     try {
       const payload = buildPayload();
-      let res;
-      if (exists) res = await updateKarigarProfile(payload);
-      else         res = await createKarigarProfile(payload);
+      // Backend auto-creates KarigarProfile on registration — always PATCH to update
+      const res = await updateKarigarProfile(payload);
       setKp(res.data); setExists(true);
-      setMsg(exists ? "Profile updated successfully." : "Karigar profile created!");
-    } catch(e) { setErr(e.response?.data?.error || "Failed to save profile."); }
+      setMsg("Profile saved successfully!");
+    } catch(e) {
+      const errData = e.response?.data;
+      const msg = errData?.error || errData?.detail
+        || (typeof errData === "object" ? Object.values(errData)[0] : null)
+        || "Failed to save profile. Please try again.";
+      setErr(Array.isArray(msg) ? msg[0] : msg);
+    }
     finally { setSaving(false); }
   };
 
@@ -209,7 +215,7 @@ export default function KarigarDashboard() {
                 ))}
                 <div style={{ marginLeft:"auto" }}>
                   <button className="btn btn-outline btn-sm"
-                    onClick={() => navigate(`/karigar/${kp.id}`)}>
+                    onClick={() => navigate(`/karigar/${kp.karigar_profile_id}`)}>
                     View Public Profile
                   </button>
                 </div>
