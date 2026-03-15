@@ -276,6 +276,9 @@ def update_profile(request):
     for field in ("first_name", "last_name", "email", "bio", "address"):
         if field in data:
             setattr(user, field, data[field])
+    # Handle profile image upload if included
+    if "profile_image" in request.FILES:
+        user.profile_image = request.FILES["profile_image"]
     user.save()
     return Response(_user_data(user, request))
 
@@ -299,8 +302,10 @@ def change_password(request):
     POST /api/accounts/change-password/
     Body: { current_password, new_password }
     """
-    current = request.data.get("current_password", "")
-    new_pw  = request.data.get("new_password", "")
+    # Accept both field names: 'current_password' (API standard) or 'old_password' (frontend form)
+    current = (request.data.get("current_password") or
+               request.data.get("old_password") or "").strip()
+    new_pw  = request.data.get("new_password", "").strip()
     if not current or not new_pw:
         return Response({"error": "Both current and new password are required."}, status=400)
     if len(new_pw) < 8:
@@ -806,8 +811,12 @@ def mark_booking_complete(request, pk):
         return Response({"error": "Booking not found."}, status=404)
 
     if booking.status != "accepted":
+        # Return current booking data alongside the error so frontend can sync its state
         return Response(
-            {"error": f"Only accepted bookings can be completed. Current status: {booking.status}."},
+            {
+                "error": f"Only accepted bookings can be completed. Current status: {booking.status}.",
+                "booking": _booking_data(booking, request),
+            },
             status=400
         )
 
