@@ -4,7 +4,7 @@ import {
   IUser, IPhone, IMail, IMapPin, IFileText, ILock, IEye, IEyeOff,
   ICamera, ISave, IRefresh, ICheckCirc, IAlertCirc,
   IHome, IWrench, IShield, ICalendar, IEdit
-} from "./Icons";
+} from "../components/Icons";
 import { getProfile, updateProfile, changePassword } from "../services/api";
 
 export default function Profile() {
@@ -20,7 +20,7 @@ export default function Profile() {
   const [file,    setFile]    = useState(null);
   const [showPw,  setShowPw]  = useState({ old: false, nw: false });
   const [edit,    setEdit]    = useState({ first_name:"", last_name:"", email:"", phone_number:"", bio:"", address:"" });
-  const [pw,      setPw]      = useState({ old_password:"", new_password:"", confirm_password:"" });
+  const [pw,      setPw]      = useState({ current_password:"", new_password:"", confirm_password:"" });
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { navigate("/login"); return; }
@@ -68,7 +68,7 @@ export default function Profile() {
   };
 
   const savePw = async () => {
-    if (!pw.old_password||!pw.new_password||!pw.confirm_password) { setErr("All fields are required."); return; }
+    if (!pw.current_password||!pw.new_password||!pw.confirm_password) { setErr("All fields are required."); return; }
     if (pw.new_password !== pw.confirm_password) { setErr("New passwords do not match."); return; }
     if (pw.new_password.length < 8) { setErr("Password must be at least 8 characters."); return; }
     setSave(true); setErr(""); setMsg("");
@@ -76,7 +76,7 @@ export default function Profile() {
       const res = await changePassword(pw);
       if (res.data.access) { localStorage.setItem("access_token", res.data.access); localStorage.setItem("refresh_token", res.data.refresh); }
       setMsg("Password changed successfully.");
-      setPw({ old_password:"", new_password:"", confirm_password:"" });
+      setPw({ current_password:"", new_password:"", confirm_password:"" });
     } catch (e) { setErr(e.response?.data?.error || "Failed to change password."); }
     finally { setSave(false); }
   };
@@ -278,7 +278,7 @@ export default function Profile() {
           <div className="card" style={{ padding:"22px", maxWidth:400 }}>
             <div className="form-stack">
               {[
-                { label:"Current Password", key:"old_password",     toggleKey:"old" },
+                { label:"Current Password", key:"current_password", toggleKey:"old" },
                 { label:"New Password",     key:"new_password",     toggleKey:"nw"  },
                 { label:"Confirm Password", key:"confirm_password", toggleKey:null  },
               ].map(({label,key,toggleKey})=>(

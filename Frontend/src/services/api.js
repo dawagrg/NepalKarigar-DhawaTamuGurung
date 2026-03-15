@@ -84,7 +84,9 @@ export const resetPassword  = (data) => API.post("password-reset/confirm/", data
 
 // ── Sprint 1: Profile ─────────────────────────────────────────────────────────
 export const getProfile          = ()     => API.get("profile/");
-export const updateProfile       = (data) => API.patch("profile/update/", data);
+export const updateProfile       = (data) => API.patch("profile/update/", data, {
+  headers: { "Content-Type": "multipart/form-data" },
+});
 export const uploadProfileImage  = (data) => API.post("profile/upload-image/", data, {
   headers: { "Content-Type": "multipart/form-data" },
 });

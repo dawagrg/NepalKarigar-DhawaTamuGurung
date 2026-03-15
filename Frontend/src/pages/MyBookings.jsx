@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  listBookings, cancelBooking, respondBooking,
+  listBookings, getBooking, cancelBooking, respondBooking,
   bargainOffer, bargainCounter, bargainAcceptCounter,
   submitReview, markBookingComplete,
 } from "../services/api";
@@ -44,16 +44,15 @@ function InlineReviewForm({ booking, onDone, onCancel }) {
       const res = await submitReview(booking.id, { rating, comment: comment.trim() });
       onDone(res.data);
     } catch(e) {
-      const d = e.response?.data;
+      console.error("Review submit error:", e.response?.status, e.response?.data);
+      const d      = e.response?.data;
       const status = e.response?.status;
-      if (status === 401) { setErr("Session expired. Please log in again."); return; }
-      if (status === 400 && d?.error) { setErr(d.error); return; }
-      if (status === 403) { setErr("Only customers can submit reviews."); return; }
-      if (status === 404) { setErr("Booking not found."); return; }
-      const msg = d?.error || d?.detail
-        || (typeof d === "object" && d !== null ? Object.values(d)[0] : null)
-        || "Failed to submit review. Please try again.";
-      setErr(Array.isArray(msg) ? msg[0] : String(msg));
+      if (!e.response) { setErr("Cannot reach server. Is the backend running?"); return; }
+      if (status === 401) { setErr("Session expired — please log out and log in again, then retry."); return; }
+      if (status === 403) { setErr(d?.error || "Permission denied. Only customers can review."); return; }
+      if (status === 404) { setErr("Booking not found for your account."); return; }
+      if (status === 400) { setErr(d?.error || "Bad request: " + JSON.stringify(d)); return; }
+      setErr(`Error ${status}: ` + (d?.error || d?.detail || JSON.stringify(d) || "Unknown error"));
     }
     finally { setSaving(false); }
   };
@@ -163,7 +162,23 @@ export default function MyBookings() {
       setBookings(bs => bs.map(b => b.id === id ? res.data : b));
       setMsg(id, successMsg);
     } catch(e) {
-      setErr(id, e.response?.data?.error || "Action failed.");
+      const errMsg = e.response?.data?.error || "Action failed.";
+      // If the error includes fresh booking data (status mismatch), sync UI immediately
+      if (e.response?.status === 400 && e.response?.data?.booking) {
+        setBookings(bs => bs.map(b => b.id === id ? e.response.data.booking : b));
+        setErr(id, errMsg + " — Refreshed.");
+      // Fallback: fetch fresh booking from server
+      } else if (e.response?.status === 400 && errMsg.toLowerCase().includes("current status")) {
+        try {
+          const fresh = await getBooking(id);
+          setBookings(bs => bs.map(b => b.id === id ? fresh.data : b));
+          setErr(id, "Page refreshed — current status shown.");
+        } catch {
+          setErr(id, errMsg);
+        }
+      } else {
+        setErr(id, errMsg);
+      }
     }
   };
 
@@ -203,13 +218,21 @@ export default function MyBookings() {
       <div style={{ maxWidth:860,margin:"0 auto",padding:"28px 20px" }}>
 
         {/* Header */}
-        <div style={{ marginBottom:22 }}>
-          <h1 style={{ fontSize:22,fontWeight:800,color:"var(--text-h)",marginBottom:4 }}>
-            {isKarigar ? "Incoming Bookings" : "My Bookings"}
-          </h1>
-          <p style={{ fontSize:13,color:"var(--text-s)" }}>
-            {isKarigar ? "Manage booking requests from customers." : "Track and manage your service bookings."}
-          </p>
+        <div style={{ marginBottom:22, display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:800,color:"var(--text-h)",marginBottom:4 }}>
+              {isKarigar ? "Incoming Bookings" : "My Bookings"}
+            </h1>
+            <p style={{ fontSize:13,color:"var(--text-s)" }}>
+              {isKarigar ? "Manage booking requests from customers." : "Track and manage your service bookings."}
+            </p>
+          </div>
+          <button onClick={load}
+            style={{ padding:"7px 14px", borderRadius:8, border:"1.5px solid var(--border)",
+              background:"#fff", cursor:"pointer", fontSize:12, fontWeight:600,
+              color:"var(--text-s)", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+            🔄 Refresh
+          </button>
         </div>
 
         {/* Filter tabs */}
