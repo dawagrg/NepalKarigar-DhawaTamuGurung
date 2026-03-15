@@ -51,6 +51,10 @@ urlpatterns = [
     # ── Notifications ─────────────────────────────────────────────────────────
     path("notifications/",             views.get_notifications,      name="notifications"),
 
+    # ── Karigar Application ──────────────────────────────────────────────────────
+    path("karigar-application/submit/",              views.submit_karigar_application,   name="app_submit"),
+    path("karigar-application/status/",              views.check_application_status,     name="app_status"),
+
     # ── Admin ─────────────────────────────────────────────────────────────────
     path("admin/stats/",                         views.admin_stats,              name="admin_stats"),
     path("admin/users/",                         views.admin_list_users,         name="admin_users"),
@@ -58,4 +62,9 @@ urlpatterns = [
     path("admin/karigars/",                      views.admin_list_karigars,      name="admin_karigars"),
     path("admin/karigars/<int:pk>/verify/",      views.admin_verify_karigar,     name="admin_verify"),
     path("admin/bookings/",                      views.admin_list_bookings,      name="admin_bookings"),
+
+    # ── Admin: Applications ───────────────────────────────────────────────────
+    path("admin/applications/",                      views.admin_list_applications,      name="admin_applications"),
+    path("admin/applications/<int:app_id>/approve/", views.admin_approve_application,    name="admin_approve_app"),
+    path("admin/applications/<int:app_id>/reject/",  views.admin_reject_application,     name="admin_reject_app"),
 ]

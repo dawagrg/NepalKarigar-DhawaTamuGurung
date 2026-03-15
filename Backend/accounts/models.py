@@ -176,3 +176,62 @@ class Review(models.Model):
 
     def __str__(self):
         return f"{self.user.username} → {self.karigar} ({self.rating}★)"
+
+
+# ── Karigar Application (verification before activation) ──────────────────────
+class KarigarApplication(models.Model):
+    STATUS_CHOICES = [
+        ('pending',  'Pending Review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    user               = models.OneToOneField(
+                             User, on_delete=models.CASCADE,
+                             related_name='karigar_application'
+                         )
+    # Personal details
+    full_name          = models.CharField(max_length=200)
+    date_of_birth      = models.DateField()
+    age                = models.PositiveIntegerField()
+    address            = models.CharField(max_length=300)
+    district           = models.CharField(max_length=100)
+    # Citizenship
+    citizenship_number = models.CharField(max_length=50)
+    citizenship_front  = models.ImageField(upload_to='applications/citizenship/')
+    citizenship_back   = models.ImageField(upload_to='applications/citizenship/',
+                                           null=True, blank=True)
+    # Service evidence
+    service_category   = models.ForeignKey(
+                             'ServiceCategory', on_delete=models.SET_NULL,
+                             null=True, blank=True
+                         )
+    service_title      = models.CharField(max_length=200)
+    experience_years   = models.PositiveIntegerField(default=0)
+    certificate        = models.ImageField(
+                             upload_to='applications/certificates/',
+                             null=True, blank=True
+                         )
+    work_sample        = models.ImageField(
+                             upload_to='applications/samples/',
+                             null=True, blank=True
+                         )
+    about_yourself     = models.TextField(blank=True)
+    # Admin review
+    status             = models.CharField(
+                             max_length=20, choices=STATUS_CHOICES, default='pending'
+                         )
+    admin_note         = models.TextField(blank=True)
+    submitted_at       = models.DateTimeField(default=timezone.now)
+    reviewed_at        = models.DateTimeField(null=True, blank=True)
+    reviewed_by        = models.ForeignKey(
+                             User, on_delete=models.SET_NULL,
+                             null=True, blank=True,
+                             related_name='reviewed_applications'
+                         )
+
+    class Meta:
+        ordering = ['-submitted_at']
+
+    def __str__(self):
+        return f"Application: {self.user.username} — {self.status}"

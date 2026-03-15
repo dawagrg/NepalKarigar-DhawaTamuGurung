@@ -5,7 +5,7 @@ from .models import (
     User, PasswordResetToken,
     ServiceCategory, SubService,
     KarigarProfile, KarigarGallery,
-    Booking, Review,
+    Booking, Review, KarigarApplication,
 )
 
 
@@ -126,3 +126,23 @@ class ReviewAdmin(admin.ModelAdmin):
     def short_comment(self, obj):
         return obj.comment[:60] + ('…' if len(obj.comment) > 60 else '')
     short_comment.short_description = 'Comment'
+
+
+# ── Karigar Application ───────────────────────────────────────────────────────
+@admin.register(KarigarApplication)
+class KarigarApplicationAdmin(admin.ModelAdmin):
+    list_display   = ('full_name', 'username_display', 'phone_display', 'service_title',
+                      'district', 'status', 'submitted_at')
+    list_filter    = ('status', 'district', 'service_category')
+    search_fields  = ('full_name', 'user__username', 'user__phone_number',
+                      'citizenship_number', 'service_title')
+    ordering       = ('-submitted_at',)
+    readonly_fields = ('submitted_at', 'reviewed_at', 'reviewed_by')
+
+    def username_display(self, obj):
+        return obj.user.username
+    username_display.short_description = "Username"
+
+    def phone_display(self, obj):
+        return obj.user.phone_number
+    phone_display.short_description = "Phone"

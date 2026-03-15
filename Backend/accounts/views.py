@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import (
     User, PasswordResetToken, ServiceCategory, SubService,
-    KarigarProfile, KarigarGallery, Booking, Review,
+    KarigarProfile, KarigarGallery, Booking, Review, KarigarApplication,
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -172,6 +172,17 @@ def register_user(request):
 
     if role == "karigar":
         KarigarProfile.objects.create(user=user)
+        # Karigar accounts start inactive — must submit application & get admin approval
+        user.is_active = False
+        user.save()
+        return Response({
+            "requires_application": True,
+            "user_id":      user.id,
+            "username":     user.username,
+            "phone_number": user.phone_number,
+            "role":         "karigar",
+            "message": "Account created. Please complete your verification application.",
+        }, status=201)
 
     return Response({**_tokens(user), **_user_data(user, request)}, status=201)
 
@@ -1129,18 +1140,23 @@ def submit_review(request, booking_id):
     Customer submits a review for a completed booking.
     """
     if request.user.role != "customer":
-        return Response({"error": "Only customers can submit reviews."}, status=403)
+        return Response({"error": "Only customers can submit reviews. You are logged in as a karigar."}, status=403)
 
+    # First check if booking exists at all
     try:
-        booking = Booking.objects.get(pk=booking_id, user=request.user)
+        booking = Booking.objects.get(pk=booking_id)
     except Booking.DoesNotExist:
-        return Response({"error": "Booking not found."}, status=404)
+        return Response({"error": f"Booking #{booking_id} does not exist."}, status=404)
+
+    # Then check if it belongs to this customer
+    if booking.user != request.user:
+        return Response({"error": f"Booking #{booking_id} does not belong to your account (logged in as: {request.user.username})."}, status=403)
 
     if booking.status != "completed":
-        return Response({"error": "You can only review completed bookings."}, status=400)
+        return Response({"error": f"Booking status is '{booking.status}'. You can only review completed bookings."}, status=400)
 
     if Review.objects.filter(booking=booking).exists():
-        return Response({"error": "You have already reviewed this booking."}, status=400)
+        return Response({"error": "You have already submitted a review for this booking."}, status=400)
 
     rating  = request.data.get("rating")
     comment = request.data.get("comment", "").strip()
@@ -1330,3 +1346,309 @@ def get_notifications(request):
                 notifs.append({"id": f"b{b.id}_cancelled", "type": "error",   "msg": f"{cname} cancelled their booking.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
 
     return Response({"count": len(notifs), "results": notifs})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  KARIGAR APPLICATION — Verification Flow
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _application_data(app, request=None):
+    """Serialise a KarigarApplication for API responses."""
+    def img(field):
+        return _abs_url(request, field.url) if field else None
+    return {
+        "id":                 app.id,
+        "user_id":            app.user.id,
+        "username":           app.user.username,
+        "full_name":          app.full_name,
+        "phone_number":       app.user.phone_number,
+        "email":              app.user.email,
+        "date_of_birth":      str(app.date_of_birth),
+        "age":                app.age,
+        "address":            app.address,
+        "district":           app.district,
+        "citizenship_number": app.citizenship_number,
+        "citizenship_front":  img(app.citizenship_front),
+        "citizenship_back":   img(app.citizenship_back),
+        "service_category":   app.service_category.name if app.service_category else "",
+        "service_category_id":app.service_category.id   if app.service_category else None,
+        "service_title":      app.service_title,
+        "experience_years":   app.experience_years,
+        "certificate":        img(app.certificate),
+        "work_sample":        img(app.work_sample),
+        "about_yourself":     app.about_yourself,
+        "status":             app.status,
+        "admin_note":         app.admin_note,
+        "submitted_at":       app.submitted_at.strftime("%Y-%m-%d %H:%M") if app.submitted_at else "",
+        "reviewed_at":        app.reviewed_at.strftime("%Y-%m-%d %H:%M") if app.reviewed_at else "",
+    }
+
+
+def _send_sms_notification(phone_number, message):
+    """
+    Send an SMS notification.
+    In development this prints to console.
+    In production replace with Sparrow SMS / Aakash SMS API.
+    """
+    import re
+    clean = re.sub(r'\D', '', phone_number)
+    print(f"\n{'='*60}")
+    print(f"📱 SMS TO: +977-{clean}")
+    print(f"MESSAGE : {message}")
+    print(f"{'='*60}\n")
+    # ── Production: Sparrow SMS (Nepal) ──────────────────────────────────
+    # import requests
+    # requests.post("https://api.sparrowsms.com/v2/sms/", json={
+    #     "token":  "YOUR_SPARROW_TOKEN",
+    #     "from":   "NepalKarigar",
+    #     "to":     clean,
+    #     "text":   message,
+    # })
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def submit_karigar_application(request):
+    """
+    POST /api/accounts/karigar-application/submit/
+    Karigar submits verification application after registration.
+    Uses multipart/form-data (files included).
+    Does NOT require authentication — user is inactive at this point.
+    """
+    user_id = request.data.get("user_id")
+    if not user_id:
+        return Response({"error": "user_id is required."}, status=400)
+
+    try:
+        user = User.objects.get(pk=user_id, role="karigar")
+    except User.DoesNotExist:
+        return Response({"error": "Karigar account not found."}, status=404)
+
+    # Prevent re-submission if already submitted
+    if KarigarApplication.objects.filter(user=user).exists():
+        existing = KarigarApplication.objects.get(user=user)
+        return Response({
+            "already_submitted": True,
+            "status": existing.status,
+            "message": "Application already submitted. Please wait for admin review.",
+        })
+
+    # Validate required fields
+    required = ["full_name", "date_of_birth", "age", "address",
+                "district", "citizenship_number"]
+    for field in required:
+        if not request.data.get(field, "").strip():
+            return Response({"error": f"{field.replace('_', ' ').title()} is required."}, status=400)
+
+    if "citizenship_front" not in request.FILES:
+        return Response({"error": "Citizenship front photo is required."}, status=400)
+
+    # Parse date_of_birth
+    from datetime import date as dt_date
+    dob_str = request.data.get("date_of_birth", "")
+    try:
+        dob = dt_date.fromisoformat(dob_str)
+    except ValueError:
+        return Response({"error": "Invalid date of birth format. Use YYYY-MM-DD."}, status=400)
+
+    # Service category (optional but encouraged)
+    service_category = None
+    cat_id = request.data.get("service_category_id")
+    if cat_id:
+        try:
+            service_category = ServiceCategory.objects.get(pk=int(cat_id))
+        except (ServiceCategory.DoesNotExist, ValueError):
+            pass
+
+    app = KarigarApplication.objects.create(
+        user               = user,
+        full_name          = request.data.get("full_name", "").strip(),
+        date_of_birth      = dob,
+        age                = int(request.data.get("age", 0)),
+        address            = request.data.get("address", "").strip(),
+        district           = request.data.get("district", "").strip(),
+        citizenship_number = request.data.get("citizenship_number", "").strip(),
+        citizenship_front  = request.FILES.get("citizenship_front"),
+        citizenship_back   = request.FILES.get("citizenship_back"),
+        service_category   = service_category,
+        service_title      = request.data.get("service_title", "").strip(),
+        experience_years   = int(request.data.get("experience_years", 0) or 0),
+        certificate        = request.FILES.get("certificate"),
+        work_sample        = request.FILES.get("work_sample"),
+        about_yourself     = request.data.get("about_yourself", "").strip(),
+        status             = "pending",
+    )
+
+    # Notify admin (console in dev)
+    print(f"\n🔔 NEW KARIGAR APPLICATION: {user.username} ({user.phone_number})\n")
+
+    return Response({
+        "success":   True,
+        "message":   "Application submitted successfully! You will receive an SMS once reviewed.",
+        "status":    "pending",
+        "app_id":    app.id,
+    }, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def check_application_status(request):
+    """
+    GET /api/accounts/karigar-application/status/?user_id=
+    Check application status for a given user_id (no auth needed — user is inactive).
+    """
+    user_id = request.query_params.get("user_id")
+    if not user_id:
+        return Response({"error": "user_id is required."}, status=400)
+    try:
+        app = KarigarApplication.objects.get(user_id=user_id)
+        return Response({
+            "has_application": True,
+            "status":          app.status,
+            "admin_note":      app.admin_note,
+            "submitted_at":    app.submitted_at.strftime("%Y-%m-%d %H:%M"),
+        })
+    except KarigarApplication.DoesNotExist:
+        return Response({"has_application": False, "status": "not_submitted"})
+
+
+# ── Admin: list applications ───────────────────────────────────────────────────
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_list_applications(request):
+    """
+    GET /api/accounts/admin/applications/?status=pending&page=
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    qs     = KarigarApplication.objects.select_related("user", "service_category")
+    status = request.query_params.get("status", "")
+    search = request.query_params.get("search", "").strip()
+
+    if status in ("pending", "approved", "rejected"):
+        qs = qs.filter(status=status)
+    if search:
+        qs = qs.filter(
+            Q(user__username__icontains=search) |
+            Q(full_name__icontains=search) |
+            Q(citizenship_number__icontains=search) |
+            Q(service_title__icontains=search)
+        )
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = 15
+    except ValueError:
+        page = 1
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    apps  = qs[start: start + page_size]
+
+    return Response({
+        "count":   total,
+        "page":    page,
+        "pages":   (total + page_size - 1) // page_size,
+        "results": [_application_data(a, request) for a in apps],
+    })
+
+
+# ── Admin: approve application ────────────────────────────────────────────────
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def admin_approve_application(request, app_id):
+    """
+    POST /api/accounts/admin/applications/<app_id>/approve/
+    Activates the karigar account + marks KarigarProfile as verified + sends SMS.
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    try:
+        app = KarigarApplication.objects.select_related(
+            "user", "service_category"
+        ).get(pk=app_id)
+    except KarigarApplication.DoesNotExist:
+        return Response({"error": "Application not found."}, status=404)
+
+    if app.status == "approved":
+        return Response({"error": "Application already approved."}, status=400)
+
+    # Activate user account
+    app.user.is_active = True
+    app.user.save()
+
+    # Update karigar profile with application details
+    try:
+        kp = app.user.karigar_profile
+    except KarigarProfile.DoesNotExist:
+        kp = KarigarProfile.objects.create(user=app.user)
+
+    kp.is_verified      = True
+    kp.experience_years = app.experience_years
+    kp.district         = app.district
+    if app.service_category:
+        kp.category = app.service_category
+    kp.save()
+
+    # Mark application approved
+    app.status      = "approved"
+    app.admin_note  = request.data.get("admin_note", "")
+    app.reviewed_at = dj_timezone.now()
+    app.reviewed_by = request.user
+    app.save()
+
+    # Send SMS approval notification
+    msg = (
+        f"Congratulations {app.full_name}! Your NepalKarigar account has been "
+        f"approved. You can now log in and start receiving bookings. "
+        f"Welcome to the platform!"
+    )
+    _send_sms_notification(app.user.phone_number, msg)
+
+    return Response({
+        "success":  True,
+        "message":  f"Application approved. SMS sent to {app.user.phone_number}.",
+        "app":      _application_data(app, request),
+    })
+
+
+# ── Admin: reject application ─────────────────────────────────────────────────
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def admin_reject_application(request, app_id):
+    """
+    POST /api/accounts/admin/applications/<app_id>/reject/
+    Body: { reason: "..." }
+    Sends SMS with rejection reason + keeps account inactive.
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    try:
+        app = KarigarApplication.objects.select_related("user").get(pk=app_id)
+    except KarigarApplication.DoesNotExist:
+        return Response({"error": "Application not found."}, status=404)
+
+    reason = request.data.get("reason", "Your application did not meet our requirements.")
+
+    app.status      = "rejected"
+    app.admin_note  = reason
+    app.reviewed_at = dj_timezone.now()
+    app.reviewed_by = request.user
+    app.save()
+
+    # Send SMS rejection notification
+    msg = (
+        f"Dear {app.full_name}, your NepalKarigar application has been reviewed. "
+        f"Unfortunately it was not approved. Reason: {reason}. "
+        f"You may contact support at support@nepalkarigar.com.np for help."
+    )
+    _send_sms_notification(app.user.phone_number, msg)
+
+    return Response({
+        "success": True,
+        "message": f"Application rejected. SMS sent to {app.user.phone_number}.",
+        "app":     _application_data(app, request),
+    })
