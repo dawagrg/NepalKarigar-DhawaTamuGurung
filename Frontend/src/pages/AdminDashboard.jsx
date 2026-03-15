@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   adminGetStats, adminListUsers, adminToggleUser,
   adminListKarigars, adminVerifyKarigar, adminListBookings,
+  adminListApplications, adminApproveApplication, adminRejectApplication,
 } from "../services/api";
 import { IUser, IWrench, ICheckCirc, IAlertCirc, ISearch, IShield } from "../components/Icons";
 
@@ -114,10 +115,11 @@ function StatCard({ label, value, sub, color = "var(--primary)", icon }) {
 
 // ── Section tabs ──────────────────────────────────────────────────────────────
 const TABS = [
-  { id: "overview",  label: "Overview" },
-  { id: "users",     label: "Users" },
-  { id: "karigars",  label: "Karigar Verification" },
-  { id: "bookings",  label: "Bookings" },
+  { id: "overview",      label: "Overview" },
+  { id: "applications",  label: "📋 Applications" },
+  { id: "users",         label: "Users" },
+  { id: "karigars",      label: "Karigar Verification" },
+  { id: "bookings",      label: "Bookings" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,10 +170,11 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {tab === "overview"  && <OverviewTab />}
-        {tab === "users"     && <UsersTab />}
-        {tab === "karigars"  && <KarigarsTab />}
-        {tab === "bookings"  && <BookingsTab />}
+        {tab === "overview"      && <OverviewTab />}
+        {tab === "applications"  && <ApplicationsTab />}
+        {tab === "users"         && <UsersTab />}
+        {tab === "karigars"      && <KarigarsTab />}
+        {tab === "bookings"      && <BookingsTab />}
 
       </div>
     </div>
@@ -179,6 +182,264 @@ export default function AdminDashboard() {
 }
 
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// APPLICATIONS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function ApplicationsTab() {
+  const [apps,       setApps]      = useState([]);
+  const [loading,    setLoading]   = useState(true);
+  const [statusFilt, setStatusFilt]= useState("pending");
+  const [search,     setSearch]    = useState("");
+  const [page,       setPage]      = useState(1);
+  const [meta,       setMeta]      = useState({ total:0, pages:1 });
+  const [selected,   setSelected]  = useState(null);  // expanded app id
+  const [rejectNote, setRejectNote]= useState("");
+  const [acting,     setActing]    = useState(null);
+  const [msg,        setMsg]       = useState("");
+
+  const load = useCallback((p=1) => {
+    setLoading(true);
+    adminListApplications({ status:statusFilt, search, page:p })
+      .then(r => {
+        setApps(r.data.results);
+        setMeta({ total:r.data.count, pages:r.data.pages });
+        setPage(p);
+      })
+      .catch(()=>{})
+      .finally(()=>setLoading(false));
+  }, [statusFilt, search]);
+
+  useEffect(()=>{ load(1); }, [statusFilt]);
+
+  const approve = async (appId) => {
+    if (!confirm("Approve this karigar application? Their account will be activated.")) return;
+    setActing(appId); setMsg("");
+    try {
+      await adminApproveApplication(appId, {});
+      setMsg("✅ Application approved! SMS sent to karigar.");
+      load(page);
+      setSelected(null);
+    } catch(e) { alert(e.response?.data?.error || "Failed to approve."); }
+    finally { setActing(null); }
+  };
+
+  const reject = async (appId) => {
+    if (!rejectNote.trim()) { alert("Please enter a rejection reason."); return; }
+    setActing(appId); setMsg("");
+    try {
+      await adminRejectApplication(appId, { reason: rejectNote });
+      setMsg("Application rejected. SMS sent to karigar.");
+      setRejectNote("");
+      load(page);
+      setSelected(null);
+    } catch(e) { alert(e.response?.data?.error || "Failed to reject."); }
+    finally { setActing(null); }
+  };
+
+  const STATUS_CLR = {
+    pending:  { color:"#D97706", bg:"#FFFBEB", bd:"#FDE68A"  },
+    approved: { color:"#16A34A", bg:"#F0FDF4", bd:"#BBF7D0"  },
+    rejected: { color:"#DC2626", bg:"#FEF2F2", bd:"#FECACA"  },
+  };
+
+  const MEDIA_BASE = "http://127.0.0.1:8000";
+  const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/") ? r : "/media/" + r}`;
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <h2 style={{ fontSize:16, fontWeight:800, color:"var(--text-h)" }}>
+          Karigar Applications
+        </h2>
+        <div style={{ display:"flex", gap:6 }}>
+          {["pending","approved","rejected"].map(s=>(
+            <button key={s} onClick={()=>{ setStatusFilt(s); setSelected(null); }}
+              style={{ padding:"5px 14px", borderRadius:20, border:"1.5px solid",
+                fontSize:12, fontWeight:700, cursor:"pointer",
+                borderColor: statusFilt===s ? STATUS_CLR[s].color : "var(--border)",
+                background:  statusFilt===s ? STATUS_CLR[s].bg    : "#fff",
+                color:       statusFilt===s ? STATUS_CLR[s].color : "var(--text-s)" }}>
+              {s.charAt(0).toUpperCase()+s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ position:"relative", marginBottom:14, maxWidth:340 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          onKeyDown={e=>e.key==="Enter" && load(1)}
+          placeholder="Search name, citizenship, trade…"
+          style={{ width:"100%", padding:"8px 12px 8px 34px", borderRadius:8,
+            border:"1.5px solid var(--border)", fontSize:13, outline:"none",
+            background:"#fff", boxSizing:"border-box" }}/>
+        <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)",
+          fontSize:14, color:"var(--text-p)" }}>🔍</span>
+      </div>
+
+      {msg && <div style={{ padding:"10px 14px", background:"#F0FDF4", border:"1.5px solid #BBF7D0",
+        borderRadius:9, marginBottom:12, fontSize:13, color:"#16A34A", fontWeight:600 }}>{msg}</div>}
+
+      {loading ? (
+        <div style={{ padding:"40px", textAlign:"center", color:"var(--text-p)", fontSize:13 }}>Loading applications…</div>
+      ) : apps.length === 0 ? (
+        <div style={{ padding:"48px", textAlign:"center" }}>
+          <div style={{ fontSize:40, marginBottom:10 }}>📋</div>
+          <p style={{ fontSize:14, color:"var(--text-s)" }}>No {statusFilt} applications.</p>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {apps.map(app => {
+            const s   = STATUS_CLR[app.status] || STATUS_CLR.pending;
+            const exp = selected === app.id;
+            return (
+              <div key={app.id} className="card" style={{ overflow:"hidden" }}>
+
+                {/* App header row */}
+                <div style={{ padding:"14px 16px", display:"flex", gap:12,
+                  alignItems:"center", cursor:"pointer", flexWrap:"wrap" }}
+                  onClick={()=>setSelected(exp ? null : app.id)}>
+                  <div style={{ width:42, height:42, borderRadius:"50%", background:"var(--primary-bg)",
+                    border:"2px solid var(--primary-bd)", display:"flex", alignItems:"center",
+                    justifyContent:"center", flexShrink:0, fontWeight:700, fontSize:17, color:"var(--primary)" }}>
+                    {(app.full_name||"K")[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:14, color:"var(--text-h)" }}>
+                      {app.full_name}
+                    </div>
+                    <div style={{ fontSize:12, color:"var(--text-s)" }}>
+                      📞 {app.phone_number} &nbsp;•&nbsp; 🔧 {app.service_title || "—"} &nbsp;•&nbsp; 📍 {app.district}
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11,
+                      fontWeight:700, border:`1.5px solid ${s.bd}`,
+                      background:s.bg, color:s.color }}>
+                      {app.status.charAt(0).toUpperCase()+app.status.slice(1)}
+                    </span>
+                    <span style={{ fontSize:11, color:"var(--text-p)" }}>{app.submitted_at}</span>
+                    <span style={{ color:"var(--text-p)", fontSize:14 }}>{exp?"▲":"▼"}</span>
+                  </div>
+                </div>
+
+                {/* Expanded detail */}
+                {exp && (
+                  <div style={{ borderTop:"1px solid var(--border)", padding:"16px" }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:10, marginBottom:16 }}>
+                      {[
+                        ["Full Name",        app.full_name],
+                        ["Username",         app.username],
+                        ["Phone",            app.phone_number],
+                        ["Email",            app.email],
+                        ["Date of Birth",    app.date_of_birth],
+                        ["Age",              app.age+" years"],
+                        ["Address",          app.address],
+                        ["District",         app.district],
+                        ["Citizenship No.",  app.citizenship_number],
+                        ["Category",         app.service_category||"—"],
+                        ["Service Title",    app.service_title],
+                        ["Experience",       app.experience_years+" yrs"],
+                      ].map(([l,v])=>(
+                        <div key={l} style={{ background:"var(--bg-subtle)", borderRadius:8,
+                          padding:"8px 12px", border:"1px solid var(--border)" }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:"var(--text-p)",
+                            textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:3 }}>{l}</div>
+                          <div style={{ fontSize:13, color:"var(--text-h)", fontWeight:600,
+                            wordBreak:"break-word" }}>{v||"—"}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {app.about_yourself && (
+                      <div style={{ background:"#F9FAFB", borderRadius:8, padding:"10px 14px",
+                        marginBottom:14, border:"1px solid var(--border)" }}>
+                        <p style={{ fontSize:11, fontWeight:700, color:"var(--text-p)",
+                          textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:5 }}>About</p>
+                        <p style={{ fontSize:13, color:"var(--text-b)", lineHeight:1.6 }}>{app.about_yourself}</p>
+                      </div>
+                    )}
+
+                    {/* Document images */}
+                    <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:16 }}>
+                      {[
+                        ["Citizenship Front", app.citizenship_front],
+                        ["Citizenship Back",  app.citizenship_back],
+                        ["Certificate",       app.certificate],
+                        ["Work Sample",       app.work_sample],
+                      ].filter(([,url])=>url).map(([label, url])=>(
+                        <div key={label} style={{ textAlign:"center" }}>
+                          <p style={{ fontSize:11, fontWeight:700, color:"var(--text-p)",
+                            marginBottom:5, textTransform:"uppercase" }}>{label}</p>
+                          <a href={imgUrl(url)} target="_blank" rel="noopener noreferrer">
+                            <img src={imgUrl(url)} alt={label}
+                              style={{ width:120, height:90, objectFit:"cover",
+                                borderRadius:8, border:"1.5px solid var(--border)",
+                                cursor:"pointer" }}/>
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Action buttons — only for pending */}
+                    {app.status === "pending" && (
+                      <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end" }}>
+                        <button onClick={()=>approve(app.id)} disabled={acting===app.id}
+                          style={{ padding:"9px 20px", borderRadius:8, border:"none",
+                            background:"#16A34A", color:"white", fontWeight:700,
+                            fontSize:13, cursor:"pointer" }}>
+                          ✓ Approve & Activate
+                        </button>
+                        <div style={{ flex:1, minWidth:200 }}>
+                          <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)}
+                            placeholder="Rejection reason (required to reject)…"
+                            style={{ width:"100%", padding:"9px 11px", borderRadius:8,
+                              border:"1.5px solid #FECACA", fontSize:13, outline:"none",
+                              boxSizing:"border-box" }}/>
+                        </div>
+                        <button onClick={()=>reject(app.id)} disabled={acting===app.id||!rejectNote.trim()}
+                          style={{ padding:"9px 18px", borderRadius:8, border:"none",
+                            background:rejectNote.trim()?"#DC2626":"#FCA5A5",
+                            color:"white", fontWeight:700, fontSize:13,
+                            cursor:rejectNote.trim()?"pointer":"not-allowed" }}>
+                          ✗ Reject
+                        </button>
+                      </div>
+                    )}
+
+                    {app.status !== "pending" && app.admin_note && (
+                      <div style={{ padding:"10px 14px", borderRadius:8,
+                        background: app.status==="approved"?"#F0FDF4":"#FEF2F2",
+                        border:`1.5px solid ${app.status==="approved"?"#BBF7D0":"#FECACA"}`,
+                        fontSize:13, color:app.status==="approved"?"#16A34A":"#DC2626" }}>
+                        <strong>Admin note:</strong> {app.admin_note}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {meta.pages > 1 && (
+        <div style={{ display:"flex", justifyContent:"center", gap:6, marginTop:20 }}>
+          {Array.from({length:meta.pages},(_,i)=>i+1).map(p=>(
+            <button key={p} onClick={()=>load(p)}
+              style={{ padding:"6px 12px", borderRadius:8, border:"1.5px solid",
+                borderColor:p===page?"var(--primary)":"var(--border)",
+                background:p===page?"var(--primary)":"#fff",
+                color:p===page?"white":"var(--text-h)",
+                cursor:"pointer", fontSize:13, fontWeight:600 }}>{p}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OverviewTab() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);

@@ -135,6 +135,19 @@ export const listKarigarReviews = (profileId, params) => API.get(`karigars/${pro
 export const editReview         = (reviewId, data)  => API.put(`reviews/${reviewId}/`, data);
 export const deleteReview       = (reviewId)        => API.delete(`reviews/${reviewId}/delete/`);
 
+// ── Karigar Application ──────────────────────────────────────────────────────
+export const submitKarigarApplication  = (data)   => API.post("karigar-application/submit/", data, {
+  headers: { "Content-Type": "multipart/form-data" },
+});
+export const checkApplicationStatus   = (userId)  => API.get("karigar-application/status/", {
+  params: { user_id: userId }
+});
+
+// ── Admin: Applications ───────────────────────────────────────────────────────
+export const adminListApplications     = (params) => API.get("admin/applications/", { params });
+export const adminApproveApplication   = (id, data) => API.post(`admin/applications/${id}/approve/`, data);
+export const adminRejectApplication    = (id, data) => API.post(`admin/applications/${id}/reject/`, data);
+
 // ── Improvements ─────────────────────────────────────────────────────────────
 export const markBookingComplete = (pk)   => API.post(`bookings/${pk}/complete/`);
 export const changePassword      = (data) => API.post("change-password/", data);

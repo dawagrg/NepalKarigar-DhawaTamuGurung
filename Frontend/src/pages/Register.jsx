@@ -57,11 +57,30 @@ export default function Register() {
       };
       const res = await registerUser(payload);
       const d   = res.data;
+
+      if (d.requires_application) {
+        // Karigar — account inactive until admin approves application
+        // Store pending info for the application form (no tokens yet)
+        localStorage.setItem("pending_user_id",  String(d.user_id));
+        localStorage.setItem("pending_username", d.username);
+        localStorage.setItem("pending_phone",    d.phone_number || form.phone_number.trim());
+        navigate("/karigar-apply", {
+          state: {
+            user_id:      d.user_id,
+            username:     d.username,
+            phone_number: d.phone_number || form.phone_number.trim(),
+          }
+        });
+        return;
+      }
+
+      // Customer — log in immediately
       localStorage.setItem("access_token",  d.access);
       localStorage.setItem("refresh_token", d.refresh);
       localStorage.setItem("username",      d.username);
       localStorage.setItem("user_id",       d.user_id);
       localStorage.setItem("role",          d.role);
+      if (d.is_staff) localStorage.setItem("is_staff", "true");
       navigate("/");
     } catch (err) {
       const data = err.response?.data;
