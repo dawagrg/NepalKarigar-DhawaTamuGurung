@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import { IHome } from "../components/Icons";
 
 export default function NotFound() {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ export default function NotFound() {
         {/* Big 404 */}
         <div style={{ position: "relative", marginBottom: 32 }}>
           <div style={{ fontSize: 120, fontWeight: 900, color: "#EFF6FF", lineHeight: 1, userSelect: "none", letterSpacing: "-4px" }}>404</div>
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 52 }}>🔧</div>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
         </div>
 
         <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827", marginBottom: 10 }}>Page Not Found</h1>
@@ -34,7 +35,7 @@ export default function NotFound() {
           </button>
           <Link to="/"
             style={{ padding: "10px 20px", borderRadius: 9, border: "none", background: "#2563EB", color: "white", fontWeight: 700, fontSize: 14, textDecoration: "none", display: "inline-block" }}>
-            🏠 Go Home
+            <IHome size={14} color="white"/> Go Home
           </Link>
           <Link to="/search"
             style={{ padding: "10px 20px", borderRadius: 9, border: "1.5px solid #BFDBFE", background: "#EFF6FF", color: "#2563EB", fontWeight: 700, fontSize: 14, textDecoration: "none", display: "inline-block" }}>

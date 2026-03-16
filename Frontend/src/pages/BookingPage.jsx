@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getKarigarPublicProfile, createBooking } from "../services/api";
-import { ICheckCirc, IAlertCirc, IUser, ICalendar } from "../components/Icons";
+import { ICheckCirc, IAlertCirc, IUser, ICalendar, IMoney } from "../components/Icons";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
 const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/") ? r : "/media/" + r}`;
@@ -238,8 +238,8 @@ export default function BookingPage() {
                     {wantBargain && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
                   </div>
                   <div>
-                    <div style={{ fontWeight:700,fontSize:13,color:wantBargain?"var(--primary)":"var(--text-h)" }}>
-                      💰 Negotiate the Rate
+                    <div style={{ fontWeight:700,fontSize:13,color:wantBargain?"var(--primary)":"var(--text-h)", display:"flex", alignItems:"center", gap:5 }}>
+                      <IMoney size={13} color={wantBargain?"var(--primary)":"var(--text-h)"}/> Negotiate the Rate
                     </div>
                     <div style={{ fontSize:12,color:"var(--text-s)",marginTop:1 }}>
                       Karigar's listed rate is NPR {karigarRate.toLocaleString()}/hr. Offer a different rate.

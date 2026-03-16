@@ -125,7 +125,7 @@ export const bargainAcceptCounter = (id)       => API.post(`bookings/${id}/barga
 // ── Sprint 4: Admin ───────────────────────────────────────────────────────────
 export const adminGetStats      = ()       => API.get("admin/stats/");
 export const adminListUsers     = (params) => API.get("admin/users/", { params });
-export const adminToggleUser    = (id)     => API.post(`admin/users/${id}/toggle-active/`);
+export const adminToggleUser    = (id, data) => API.post(`admin/users/${id}/toggle-active/`, data || {});
 export const adminListKarigars  = (params) => API.get("admin/karigars/", { params });
 export const adminVerifyKarigar = (id)     => API.post(`admin/karigars/${id}/verify/`);
 export const adminListBookings  = (params) => API.get("admin/bookings/", { params });
@@ -145,10 +145,26 @@ export const checkApplicationStatus   = (userId)  => API.get("karigar-applicatio
   params: { user_id: userId }
 });
 
+// ── Admin: Notifications ─────────────────────────────────────────────────────
+export const adminGetNotifications       = (params) => API.get("admin/notifications/", { params });
+export const adminMarkNotificationsRead  = (data)   => API.post("admin/notifications/read/", data);
+export const adminClearNotifications     = ()        => API.delete("admin/notifications/clear/");
+
 // ── Admin: Applications ───────────────────────────────────────────────────────
 export const adminListApplications     = (params) => API.get("admin/applications/", { params });
 export const adminApproveApplication   = (id, data) => API.post(`admin/applications/${id}/approve/`, data);
 export const adminRejectApplication    = (id, data) => API.post(`admin/applications/${id}/reject/`, data);
+
+// ── Complaints ───────────────────────────────────────────────────────────────
+export const submitComplaint       = (data)   => API.post("complaints/", data, {
+  headers: { "Content-Type": "multipart/form-data" },
+});
+export const listMyComplaints      = ()        => API.get("complaints/my/");
+export const checkComplaintStatus  = (params)  => API.get("complaints/status/", { params });
+
+// ── Admin: Complaints ─────────────────────────────────────────────────────────
+export const adminListComplaints      = (params)        => API.get("admin/complaints/", { params });
+export const adminRespondComplaint    = (id, data)      => API.post(`admin/complaints/${id}/respond/`, data);
 
 // ── Improvements ─────────────────────────────────────────────────────────────
 export const markBookingComplete = (pk)   => API.post(`bookings/${pk}/complete/`);

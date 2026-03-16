@@ -21,10 +21,10 @@ const IconTW      = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="
 const IconIG      = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>;
 
 const TEAM = [
-  { name: "Dhawa Tamu Gurung",  id: "24045866", role: "Full-Stack Lead",        emoji: "👨‍💻", color: "#2563EB", bg: "#EFF6FF", bd: "#BFDBFE" },
-  { name: "Sumit Giri",         id: "24046109", role: "Backend Developer",      emoji: "⚙️",  color: "#7C3AED", bg: "#F5F3FF", bd: "#DDD6FE" },
-  { name: "Suprim Bista",       id: "24046115", role: "Frontend Developer",     emoji: "🎨",  color: "#D97706", bg: "#FFFBEB", bd: "#FDE68A" },
-  { name: "Sijal Newar",        id: "24046079", role: "UI/UX & QA Engineer",    emoji: "🔍",  color: "#16A34A", bg: "#F0FDF4", bd: "#BBF7D0" },
+  { name: "Dhawa Tamu Gurung",  id: "24045866", role: "Full-Stack Lead",        emoji: "DT", color: "#2563EB", bg: "#EFF6FF", bd: "#BFDBFE" },
+  { name: "Sumit Giri",         id: "24046109", role: "Backend Developer",      emoji: "SG",  color: "#7C3AED", bg: "#F5F3FF", bd: "#DDD6FE" },
+  { name: "Suprim Bista",       id: "24046115", role: "Frontend Developer",     emoji: "SB",  color: "#D97706", bg: "#FFFBEB", bd: "#FDE68A" },
+  { name: "Sijal Newar",        id: "24046079", role: "UI/UX & QA Engineer",    emoji: "SN",  color: "#16A34A", bg: "#F0FDF4", bd: "#BBF7D0" },
 ];
 
 const VALUES = [
@@ -35,10 +35,10 @@ const VALUES = [
 ];
 
 const STATS = [
-  { value: "500+",   label: "Karigars",        emoji: "🔨" },
-  { value: "2,000+", label: "Bookings",         emoji: "📋" },
-  { value: "20+",    label: "Service Types",    emoji: "⚙️"  },
-  { value: "4.8★",   label: "Avg Rating",       emoji: "⭐"  },
+  { value: "500+",   label: "Karigars",        emoji: "tool" },
+  { value: "2,000+", label: "Bookings",         emoji: "book" },
+  { value: "20+",    label: "Service Types",    emoji: "SG"  },
+  { value: "4.8",     label: "Avg Rating",       emoji: "star"  },
 ];
 
 const CONTACT_INFO = [
@@ -180,7 +180,7 @@ export default function AboutUs() {
             <div style={{ flex:1, minWidth:260 }}>
               <h3 style={{ fontSize:20, fontWeight:800, color:"#111827", marginBottom:12 }}>Our Story</h3>
               <p style={{ fontSize:14, color:"#374151", lineHeight:1.8, marginBottom:12 }}>
-                NepalKarigar started as a final-year university project at <strong>Itahari International College</strong>, affiliated with London Metropolitan University. Our team saw first-hand how difficult it was for families in Sunsari and beyond to find a trustworthy plumber, electrician, or carpenter on short notice.
+                NepalKarigar started as a second-year university project at <strong>Itahari International College</strong>, affiliated with London Metropolitan University. Our team saw first-hand how difficult it was for families in Sunsari and beyond to find a trustworthy plumber, electrician, or carpenter on short notice.
               </p>
               <p style={{ fontSize:14, color:"#374151", lineHeight:1.8 }}>
                 We built a platform where karigars can showcase their skills, set fair rates, negotiate bookings, and build a verified reputation — while customers can browse, compare, and book with confidence.
@@ -188,7 +188,7 @@ export default function AboutUs() {
             </div>
             <div style={{ flexShrink:0, minWidth:180 }}>
               <div style={{ background:"white", border:"1px solid #E5E7EB", borderRadius:12, padding:"20px", textAlign:"center" }}>
-                <div style={{ fontSize:36, marginBottom:8 }}>🎓</div>
+                <div style={{ marginBottom:8, display:"flex", justifyContent:"center" }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#111827", marginBottom:4 }}>Academic Project</div>
                 <div style={{ fontSize:12, color:"#6B7280", lineHeight:1.6 }}>
                   Itahari International College<br/>London Metropolitan University<br/>
@@ -204,7 +204,7 @@ export default function AboutUs() {
           <SectionTitle
             eyebrow="The Team"
             title="Meet the Builders"
-            subtitle="Four students who turned a real problem into a working solution. Supervised by Saugat Adhikari."
+            subtitle="Four students who turned a real problem into a working solution."
           />
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:20 }}>
             {TEAM.map(m => (
@@ -221,9 +221,6 @@ export default function AboutUs() {
               </div>
             ))}
           </div>
-          <p style={{ textAlign:"center", fontSize:13, color:"#9CA3AF", marginTop:24 }}>
-            Submitted to: <strong style={{ color:"#374151" }}>Saugat Adhikari</strong> · Itahari International College / London Metropolitan University
-          </p>
         </Section>
 
         {/* ── Stats ────────────────────────────────────────────────────────── */}
@@ -275,7 +272,7 @@ export default function AboutUs() {
 
               {/* Office hours */}
               <div style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:12, padding:"16px" }}>
-                <div style={{ fontSize:12, fontWeight:700, color:"#92400E", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>🕐 Office Hours</div>
+                <div style={{ fontSize:12, fontWeight:700, color:"#92400E", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:4}}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Office Hours</div>
                 {[
                   ["Sun – Fri", "9:00 AM – 6:00 PM"],
                   ["Saturday",  "10:00 AM – 2:00 PM"],
@@ -328,7 +325,7 @@ export default function AboutUs() {
 
                   {formErr && (
                     <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#DC2626", marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
-                      ⚠️ {formErr}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> {formErr}
                     </div>
                   )}
 
@@ -393,7 +390,7 @@ export default function AboutUs() {
             <a href="#contact"  style={{ fontSize:12, color:PRIMARY,   textDecoration:"none", fontWeight:600 }}>Contact</a>
           </div>
           <p style={{ fontSize:11, color:"#D1D5DB", marginTop:14 }}>
-            © 2024 NepalKarigar · Itahari International College · London Metropolitan University
+            © 2025 NepalKarigar 
           </p>
         </div>
 

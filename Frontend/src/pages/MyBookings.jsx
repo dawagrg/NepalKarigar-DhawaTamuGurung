@@ -5,7 +5,8 @@ import {
   bargainOffer, bargainCounter, bargainAcceptCounter,
   submitReview, markBookingComplete,
 } from "../services/api";
-import { ICheckCirc, IAlertCirc, IUser } from "../components/Icons";
+import { ICheckCirc, IAlertCirc, IUser, IStarFill, IRefresh, IClipboard,
+         IMoney, IMessage, ICheck, IClose } from "../components/Icons";
 import { BookingCardSkeleton, EmptyState } from "../components/Skeleton";
 import { formatNPR } from "../utils";
 
@@ -60,7 +61,7 @@ function InlineReviewForm({ booking, onDone, onCancel }) {
   return (
     <div style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:10, padding:"14px 16px", marginTop:12 }}>
       <p style={{ fontSize:13, fontWeight:700, color:"#92400E", marginBottom:10 }}>
-        ⭐ Rate your experience with {booking.karigar_name}
+        <IStarFill size={13} color="#F59E0B"/> Rate your experience with {booking.karigar_name}
       </p>
       {err && <div className="alert alert-err" style={{ marginBottom:8, fontSize:12 }}><IAlertCirc size={12}/> {err}</div>}
       <div style={{ marginBottom:10 }}>
@@ -231,7 +232,7 @@ export default function MyBookings() {
             style={{ padding:"7px 14px", borderRadius:8, border:"1.5px solid var(--border)",
               background:"#fff", cursor:"pointer", fontSize:12, fontWeight:600,
               color:"var(--text-s)", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
-            🔄 Refresh
+            <IRefresh size={12}/> Refresh
           </button>
         </div>
 
@@ -255,7 +256,7 @@ export default function MyBookings() {
         {filtered.length === 0 ? (
           <div className="card" style={{ overflow:"hidden" }}>
             <EmptyState
-              emoji="📋"
+              icon={<IClipboard size={40} color="var(--text-p)"/>}
               title="No bookings found"
               message={filter !== "all" ? `No ${filter} bookings.` : isKarigar ? "No booking requests yet. Make sure your profile is complete and available." : "You haven't made any bookings yet. Find a karigar to get started."}
               action={!isKarigar ? "Find a Karigar" : null}
@@ -285,8 +286,8 @@ export default function MyBookings() {
                         <StatusBadge status={b.status}/>
                         {b.bargain_status !== "none" && b.bargain_status !== "agreed" && (
                           <span style={{ fontSize:11,fontWeight:600,color:"#7C3AED",background:"#F5F3FF",
-                            border:"1px solid #DDD6FE",borderRadius:20,padding:"1px 8px" }}>
-                            💰 Negotiating
+                            border:"1px solid #DDD6FE",borderRadius:20,padding:"1px 8px", display:"inline-flex", alignItems:"center", gap:3 }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Negotiating
                           </span>
                         )}
                       </div>
@@ -334,7 +335,7 @@ export default function MyBookings() {
                           ...(b.karigar_rate ? [["Listed Rate", `NPR ${parseFloat(b.karigar_rate).toLocaleString()}/hr`]] : []),
                           ...(b.offered_rate ? [["Customer Offer", `NPR ${parseFloat(b.offered_rate).toLocaleString()}/hr`]] : []),
                           ...(b.counter_rate ? [["Karigar Counter", `NPR ${parseFloat(b.counter_rate).toLocaleString()}/hr`]] : []),
-                          ...(b.final_rate   ? [["✓ Agreed Rate", `NPR ${parseFloat(b.final_rate).toLocaleString()}/hr`]] : []),
+                          ...(b.final_rate   ? [["Agreed Rate", `NPR ${parseFloat(b.final_rate).toLocaleString()}/hr`]] : []),
                           ...(b.bargain_message ? [["Bargain Note", b.bargain_message]] : []),
                         ].map(([l,v]) => (
                           <div key={l} style={{ padding:"8px 10px",background:"var(--bg-subtle)",borderRadius:7,border:"1px solid var(--border)" }}>
@@ -361,7 +362,7 @@ export default function MyBookings() {
                           {["pending","bargaining"].includes(b.status) && b.bargain_status !== "agreed" && (
                             <div style={{ background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:10,padding:"14px" }}>
                               <p style={{ fontSize:13,fontWeight:700,color:"#7C3AED",marginBottom:10 }}>
-                                💰 {b.bargain_status === "karigar_countered" ? "Karigar countered — accept or re-offer" : "Negotiate Rate"}
+                                <IMoney size={12} color="#D97706"/> {b.bargain_status === "karigar_countered" ? "Karigar countered — accept or re-offer" : "Negotiate Rate"}
                               </p>
 
                               {/* Accept counter */}
@@ -369,7 +370,7 @@ export default function MyBookings() {
                                 <button className="btn btn-sm"
                                   style={{ marginBottom:10,border:"1.5px solid #16A34A",color:"#16A34A",background:"#F0FDF4",cursor:"pointer",borderRadius:8,padding:"7px 16px",fontWeight:600,fontSize:13 }}
                                   onClick={() => doAction(b.id, ()=>bargainAcceptCounter(b.id), `Accepted NPR ${parseFloat(b.counter_rate).toLocaleString()}/hr!`)}>
-                                  ✓ Accept NPR {parseFloat(b.counter_rate).toLocaleString()}/hr
+                                  Accept NPR {parseFloat(b.counter_rate).toLocaleString()}/hr
                                 </button>
                               )}
 
@@ -426,19 +427,41 @@ export default function MyBookings() {
                               style={{ padding:"7px 16px", borderRadius:8, border:"1.5px solid #F59E0B",
                                 background:"#FFFBEB", color:"#92400E", fontWeight:700, fontSize:13, cursor:"pointer" }}
                               onClick={() => setReviewOpen(p => ({...p, [b.id]: true}))}>
-                              ⭐ Leave a Review
+                              <IStarFill size={12} color="#F59E0B"/> Leave a Review
                             </button>
                           )}
                         </div>
                       )}
 
-                      {/* View Karigar Profile link */}
-                      {!isKarigar && b.karigar_profile_id && (
+                      {/* View Karigar Profile + Complaint (Customer view) */}
+                      {!isKarigar && (
+                        <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
+                          {b.karigar_profile_id && (
+                            <button onClick={() => navigate(`/karigar/${b.karigar_profile_id}`)}
+                              style={{ padding:"6px 14px", borderRadius:8, border:"1.5px solid var(--border)",
+                                background:"#fff", color:"var(--primary)", fontWeight:600, fontSize:12, cursor:"pointer" }}>
+                              View Karigar Profile
+                            </button>
+                          )}
+                          {["completed","accepted","cancelled"].includes(b.status) && (
+                            <button onClick={() => setComplaintOpen(b)}
+                              style={{ padding:"6px 14px", borderRadius:8, border:"1.5px solid #FECACA",
+                                background:"#FEF2F2", color:"#DC2626", fontWeight:600, fontSize:12,
+                                cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+                              <IAlertTri size={12} color="#DC2626"/> File Complaint
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Karigar can also complaint customer for completed/cancelled bookings */}
+                      {isKarigar && ["completed","cancelled"].includes(b.status) && (
                         <div style={{ marginTop:8 }}>
-                          <button onClick={() => navigate(`/karigar/${b.karigar_profile_id}`)}
-                            style={{ padding:"6px 14px", borderRadius:8, border:"1.5px solid var(--border)",
-                              background:"#fff", color:"var(--primary)", fontWeight:600, fontSize:12, cursor:"pointer" }}>
-                            View Karigar Profile
+                          <button onClick={() => setComplaintOpen(b)}
+                            style={{ padding:"6px 14px", borderRadius:8, border:"1.5px solid #FECACA",
+                              background:"#FEF2F2", color:"#DC2626", fontWeight:600, fontSize:12,
+                              cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+                            <IAlertTri size={12} color="#DC2626"/> File Complaint
                           </button>
                         </div>
                       )}
@@ -451,14 +474,14 @@ export default function MyBookings() {
                           {["pending","bargaining"].includes(b.status) && (
                             <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
                               <button className="btn btn-sm"
-                                style={{ border:"1.5px solid #16A34A",color:"#16A34A",background:"#F0FDF4",cursor:"pointer",borderRadius:8,padding:"8px 18px",fontWeight:700,fontSize:13 }}
+                                style={{ border:"1.5px solid #16A34A",color:"#16A34A",background:"#F0FDF4",cursor:"pointer",borderRadius:8,padding:"8px 18px",fontWeight:700,fontSize:13, display:"flex",alignItems:"center",gap:5 }}
                                 onClick={() => doAction(b.id, ()=>respondBooking(b.id,{action:"accept"}), "Booking accepted!")}>
-                                ✓ Accept
+                                <ICheck size={13} color="#16A34A"/> Accept
                               </button>
                               <button className="btn btn-sm"
-                                style={{ border:"1.5px solid var(--danger)",color:"var(--danger)",background:"#FEF2F2",cursor:"pointer",borderRadius:8,padding:"8px 18px",fontWeight:700,fontSize:13 }}
+                                style={{ border:"1.5px solid var(--danger)",color:"var(--danger)",background:"#FEF2F2",cursor:"pointer",borderRadius:8,padding:"8px 18px",fontWeight:700,fontSize:13, display:"flex",alignItems:"center",gap:5 }}
                                 onClick={() => { if(confirm("Reject this booking?")) doAction(b.id, ()=>respondBooking(b.id,{action:"reject"}), "Booking rejected."); }}>
-                                ✗ Reject
+                                <IClose size={13} color="var(--danger)"/> Reject
                               </button>
                             </div>
                           )}
@@ -473,7 +496,7 @@ export default function MyBookings() {
                                   if(confirm("Mark this booking as completed? The customer will be able to leave a review."))
                                     doAction(b.id, ()=>markBookingComplete(b.id), "Booking marked as completed! Customer can now leave a review.");
                                 }}>
-                                ✓ Mark as Completed
+                                Mark as Completed
                               </button>
                               <span style={{ fontSize:12,color:"var(--text-p)" }}>Completed the work?</span>
                             </div>
@@ -483,7 +506,7 @@ export default function MyBookings() {
                           {["pending","bargaining"].includes(b.status) && b.bargain_status === "customer_offered" && (
                             <div style={{ background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"14px" }}>
                               <p style={{ fontSize:13,fontWeight:700,color:"#D97706",marginBottom:10 }}>
-                                💬 Customer offered NPR {b.offered_rate ? parseFloat(b.offered_rate).toLocaleString() : "—"}/hr — send a counter offer
+                                <IMessage size={13} color="#D97706"/> Customer offered NPR {b.offered_rate ? parseFloat(b.offered_rate).toLocaleString() : "—"}/hr — send a counter offer
                               </p>
                               <div style={{ display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap" }}>
                                 <div style={{ flex:1,minWidth:120 }}>
@@ -526,6 +549,18 @@ export default function MyBookings() {
           </div>
         )}
       </div>
+      {/* Complaint Modal */}
+      {complaintOpen && (
+        <ComplaintForm
+          booking={complaintOpen}
+          accusedUser={isKarigar
+            ? { id: complaintOpen.customer_id || complaintOpen.user_id, username: complaintOpen.customer_username, full_name: complaintOpen.customer_name }
+            : { id: complaintOpen.karigar_id  || complaintOpen.karigar_user_id, username: complaintOpen.karigar_username, full_name: complaintOpen.karigar_name }
+          }
+          accusedRole={isKarigar ? "Customer" : "Karigar"}
+          onClose={() => setComplaintOpen(null)}
+        />
+      )}
     </div>
   );
 }

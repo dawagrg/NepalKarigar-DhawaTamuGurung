@@ -27,7 +27,7 @@ export default function Home() {
     { value: "500+",   label: "Verified Workers"  },
     { value: "2,000+", label: "Jobs Completed"    },
     { value: "20+",    label: "Service Types"     },
-    { value: "4.8★",   label: "Average Rating"    },
+    { value: "4.8",   label: "Average Rating"    },
   ]);
 
   useEffect(() => {

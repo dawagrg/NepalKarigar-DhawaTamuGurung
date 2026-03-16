@@ -4,7 +4,7 @@ import {
   getKarigarPublicProfile,
   listKarigarReviews, submitReview, editReview, deleteReview,
 } from "../services/api";
-import { ICheckCirc, IAlertCirc, IUser, IArrow } from "../components/Icons";
+import { ICheckCirc, IAlertCirc, IUser, IArrow, IStarFill, IEdit, IPin, IFrown, IClose } from "../components/Icons";
 import { ProfileHeroSkeleton, KarigarCardSkeleton } from "../components/Skeleton";
 import { formatNPR } from "../utils";
 
@@ -195,7 +195,7 @@ function ReviewsSection({ karigarProfileId, karigarName }) {
           <button onClick={handleWriteReview}
             style={{ padding:"7px 16px", borderRadius:8, border:"1.5px solid #F59E0B", background:"#FFFBEB",
               color:"#92400E", fontWeight:700, fontSize:13, cursor:"pointer" }}>
-            ✏️ Write a Review
+            Write a Review
           </button>
         )}
       </div>
@@ -317,7 +317,7 @@ export default function KarigarProfile() {
   if (err) return (
     <div style={{ minHeight:"100vh", background:"var(--bg-page)", paddingTop:70, display:"flex", alignItems:"center", justifyContent:"center" }}>
       <div className="card" style={{ padding:"48px", textAlign:"center" }}>
-        <div style={{ fontSize:36, marginBottom:10 }}>😕</div>
+        <div style={{ marginBottom:10 }}><IFrown size={36} color="var(--text-p)"/></div>
         <p style={{ fontSize:16, fontWeight:600, color:"var(--text-h)", marginBottom:8 }}>{err}</p>
         <button className="btn btn-primary btn-sm" onClick={() => navigate("/search")}>Back to Search</button>
       </div>
@@ -412,7 +412,7 @@ export default function KarigarProfile() {
           )}
           {(kp.location||kp.district) && (
             <div style={{ marginTop:12, display:"flex", gap:6, alignItems:"center" }}>
-              <span style={{ fontSize:14 }}>📍</span>
+              <IPin size={14} color="var(--text-s)"/>
               <span style={{ fontSize:13, color:"var(--text-s)" }}>{[kp.location,kp.district].filter(Boolean).join(", ")}</span>
             </div>
           )}
@@ -479,7 +479,7 @@ export default function KarigarProfile() {
           )}
           <button onClick={()=>setImgIdx(null)}
             style={{ position:"absolute", top:16, right:20, background:"none", border:"none",
-              color:"white", fontSize:28, cursor:"pointer", lineHeight:1 }}>✕</button>
+              color:"white", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       )}
     </div>

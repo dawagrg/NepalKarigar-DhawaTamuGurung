@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { submitKarigarApplication, checkApplicationStatus, getCategories } from "../services/api";
-import { ICheckCirc, IAlertCirc, IUser, ICamera, IWrench } from "../components/Icons";
+import { ICheckCirc, IAlertCirc, IUser, ICamera, IWrench,
+         ICard, ITool, ICheck, ISmartphone, ITrophy, IAlertTri } from "../components/Icons";
 
 const DISTRICTS = [
   "Achham","Arghakhanchi","Baglung","Baitadi","Bajhang","Bajura","Banke","Bara","Bardiya",
@@ -38,7 +39,7 @@ function FileUpload({ label, name, required, hint, value, onChange }) {
             <img src={preview} alt="" style={{ maxHeight:120, maxWidth:"100%",
               borderRadius:7, objectFit:"cover" }}/>
             <div style={{ marginTop:6, fontSize:11, color:"var(--primary)", fontWeight:600 }}>
-              ✓ {value.name} — click to change
+              {value.name} — click to change
             </div>
           </div>
         ) : (
@@ -55,10 +56,10 @@ function FileUpload({ label, name, required, hint, value, onChange }) {
 }
 
 const STEPS = [
-  { id:1, label:"Personal Info",    icon:"👤" },
-  { id:2, label:"Citizenship",      icon:"🪪" },
-  { id:3, label:"Service Details",  icon:"🔧" },
-  { id:4, label:"Review & Submit",  icon:"✅" },
+  { id:1, label:"Personal Info",    icon:"user" },
+  { id:2, label:"Citizenship",      icon:"card" },
+  { id:3, label:"Service Details",  icon:"tool" },
+  { id:4, label:"Review & Submit",  icon:"check" },
 ];
 
 export default function KarigarApplicationForm() {
@@ -187,16 +188,16 @@ export default function KarigarApplicationForm() {
   // ── Already submitted ──────────────────────────────────────────────────────
   if (appStatus?.has_application) {
     const STATUS_INFO = {
-      pending:  { color:"#D97706", bg:"#FFFBEB", icon:"⏳", msg:"Your application is being reviewed by our team. You will receive an SMS once a decision is made." },
-      approved: { color:"#16A34A", bg:"#F0FDF4", icon:"✅", msg:"Your application has been approved! You can now log in." },
-      rejected: { color:"#DC2626", bg:"#FEF2F2", icon:"❌", msg:"Your application was not approved." },
+      pending:  { color:"#D97706", bg:"#FFFBEB", icon:"clock", msg:"Your application is being reviewed by our team. You will receive an SMS once a decision is made." },
+      approved: { color:"#16A34A", bg:"#F0FDF4", icon:"check", msg:"Your application has been approved! You can now log in." },
+      rejected: { color:"#DC2626", bg:"#FEF2F2", icon:"close", msg:"Your application was not approved." },
     };
     const info = STATUS_INFO[appStatus.status] || STATUS_INFO.pending;
     return (
       <div style={{ minHeight:"100vh", background:"#F9FAFB", display:"flex",
         alignItems:"center", justifyContent:"center", padding:20 }}>
         <div style={{ maxWidth:480, width:"100%", textAlign:"center" }}>
-          <div style={{ fontSize:56, marginBottom:16 }}>{info.icon}</div>
+          <div style={{ marginBottom:16, display:"flex", justifyContent:"center" }}>{info.icon==="check"?<ICheckCirc size={56} color="#16A34A"/>:info.icon==="close"?<IAlertCirc size={56} color="#DC2626"/>:<IAlertCirc size={56} color="#D97706"/>}</div>
           <h2 style={{ fontSize:22, fontWeight:800, color:"#111827", marginBottom:8 }}>
             Application {appStatus.status.charAt(0).toUpperCase() + appStatus.status.slice(1)}
           </h2>
@@ -235,7 +236,7 @@ export default function KarigarApplicationForm() {
           <ICheckCirc size={36} color="#16A34A"/>
         </div>
         <h1 style={{ fontSize:24, fontWeight:800, color:"#111827", marginBottom:10 }}>
-          Application Submitted! 🎉
+          Application Submitted!
         </h1>
         <p style={{ fontSize:14, color:"#6B7280", lineHeight:1.75, marginBottom:24 }}>
           Thank you <strong>{userName}</strong>! Your verification application has been
@@ -244,7 +245,7 @@ export default function KarigarApplicationForm() {
         <div style={{ background:"#EFF6FF", border:"1.5px solid #BFDBFE", borderRadius:12,
           padding:"16px 20px", marginBottom:24, textAlign:"left" }}>
           <p style={{ fontSize:13, fontWeight:700, color:"#1D4ED8", marginBottom:8 }}>
-            📱 What happens next?
+            What happens next?
           </p>
           {[
             "Our team will review your citizenship and service documents.",
@@ -299,7 +300,7 @@ export default function KarigarApplicationForm() {
                 borderRight: i < STEPS.length-1 ? "1px solid var(--border)" : "none",
                 transition:"background .2s" }}>
                 <div style={{ fontSize:18, marginBottom:2 }}>
-                  {done ? "✅" : s.icon}
+                  {done ? <ICheckCirc size={20} color={active?"white":"#2563EB"}/> : s.icon === "user" ? <IUser size={20} color={active?"white":"var(--text-p)"}/> : s.icon === "card" ? <ICard size={20} color={active?"white":"var(--text-p)"}/> : s.icon === "tool" ? <ITool size={20} color={active?"white":"var(--text-p)"}/> : <ICheck size={20} color={active?"white":"var(--text-p)"}/>}
                 </div>
                 <div style={{ fontSize:10, fontWeight:700,
                   color: active ? "white" : done ? "#2563EB" : "#9CA3AF",
@@ -327,7 +328,7 @@ export default function KarigarApplicationForm() {
           {step === 1 && (
             <div>
               <h2 style={{ fontSize:16, fontWeight:700, color:"var(--text-h)", marginBottom:20 }}>
-                👤 Personal Information
+                Personal Information
               </h2>
               <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
 
@@ -357,8 +358,8 @@ export default function KarigarApplicationForm() {
                       onFocus={e=>e.target.style.borderColor="var(--primary)"}
                       onBlur={e=>e.target.style.borderColor="var(--border)"}/>
                     {form.age && parseInt(form.age) < 18 && (
-                      <p style={{ fontSize:11, color:"#DC2626", marginTop:4 }}>
-                        ⚠ Must be at least 18 years old
+                      <p style={{ fontSize:11, color:"#DC2626", marginTop:4, display:"flex", alignItems:"center", gap:4 }}>
+                        <IAlertTri size={11} color="#DC2626"/> Must be at least 18 years old
                       </p>
                     )}
                   </div>
@@ -389,7 +390,7 @@ export default function KarigarApplicationForm() {
           {step === 2 && (
             <div>
               <h2 style={{ fontSize:16, fontWeight:700, color:"var(--text-h)", marginBottom:6 }}>
-                🪪 Citizenship Details
+                Citizenship Details
               </h2>
               <p style={{ fontSize:12, color:"var(--text-s)", marginBottom:20 }}>
                 Your citizenship card is used to verify your identity. Documents are kept secure and private.
@@ -425,7 +426,7 @@ export default function KarigarApplicationForm() {
           {step === 3 && (
             <div>
               <h2 style={{ fontSize:16, fontWeight:700, color:"var(--text-h)", marginBottom:6 }}>
-                🔧 Service & Skills
+                Service & Skills
               </h2>
               <p style={{ fontSize:12, color:"var(--text-s)", marginBottom:20 }}>
                 Tell us about your trade. Upload a certificate or evidence of your skills.
@@ -492,7 +493,7 @@ export default function KarigarApplicationForm() {
           {step === 4 && (
             <div>
               <h2 style={{ fontSize:16, fontWeight:700, color:"var(--text-h)", marginBottom:16 }}>
-                ✅ Review Your Application
+                Review Your Application
               </h2>
               {/* Summary */}
               {[
@@ -525,8 +526,8 @@ export default function KarigarApplicationForm() {
                     fontSize:12, padding:"5px 0", borderBottom:"1px solid #F3F4F6" }}>
                     <span style={{ color:"var(--text-s)" }}>{l}</span>
                     <span style={{ fontWeight:600,
-                      color:f?"#16A34A":"#9CA3AF" }}>
-                      {f ? "✓ "+f.name : "Not provided"}
+                      color:f?"#16A34A":"#9CA3AF", display:"flex", alignItems:"center", gap:3 }}>
+                      {f ? <><ICheck size={11} color="#16A34A"/>{f.name}</> : "Not provided"}
                     </span>
                   </div>
                 ))}
@@ -534,7 +535,7 @@ export default function KarigarApplicationForm() {
 
               <div style={{ marginTop:20, padding:"14px 16px", background:"#EFF6FF",
                 border:"1.5px solid #BFDBFE", borderRadius:10, fontSize:12, color:"#1D4ED8" }}>
-                📱 After submission, you will receive an SMS on <strong>{userPhone}</strong> once the admin reviews your application.
+                You will receive an SMS on <strong>{userPhone}</strong> once the admin reviews your application.
               </div>
             </div>
           )}

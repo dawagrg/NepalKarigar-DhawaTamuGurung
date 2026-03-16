@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { IUser, IPhone, IMail, ILock, IEye, IEyeOff, IAlertCirc, ICheckCirc, IWrench } from "../components/Icons";
 import { registerUser } from "../services/api";
 import { isValidNepalPhone, passwordStrength, PW_STRENGTH_COLOR, PW_STRENGTH_LABEL } from "../utils";
+import { IAlertTri } from "../components/Icons";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -181,7 +182,7 @@ export default function Register() {
           {/* Phone hint */}
           {form.phone_number && !isValidNepalPhone(form.phone_number) && (
             <p style={{ fontSize:11, color:"#DC2626", marginTop:-8, marginBottom:4, display:"flex", alignItems:"center", gap:4 }}>
-              ⚠ Enter a valid Nepal number (97/98/96XXXXXXXX)
+              <IAlertTri size={11} color="#DC2626"/> Enter a valid Nepal number (97/98/96XXXXXXXX)
             </p>
           )}
 

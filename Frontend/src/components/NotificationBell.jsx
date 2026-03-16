@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { getNotifications } from "../services/api";
+import { IBell } from "./Icons";
 import { timeAgo } from "../utils";
 
 const TYPE_STYLE = {
@@ -89,7 +90,7 @@ export default function NotificationBell() {
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             {notifs.length === 0 ? (
               <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-p)", fontSize: 13 }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div>
+                <div style={{ marginBottom: 8 }}><IBell size={28} color="var(--text-p)"/></div>
                 No notifications yet.
               </div>
             ) : notifs.map(n => {

@@ -85,10 +85,12 @@ export function PageSpinner() {
 }
 
 /** Empty state with icon, title, message, optional CTA */
-export function EmptyState({ emoji = "📭", title, message, action, onAction }) {
+export function EmptyState({ emoji, icon, title, message, action, onAction }) {
   return (
     <div style={{ textAlign: "center", padding: "56px 20px" }}>
-      <div style={{ fontSize: 48, marginBottom: 12, lineHeight: 1 }}>{emoji}</div>
+      <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}>
+        {icon || (emoji ? <span style={{ fontSize: 48, lineHeight: 1 }}>{emoji}</span> : <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-p)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>)}
+      </div>
       <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 6 }}>{title}</h3>
       {message && <p style={{ fontSize: 13, color: "#6B7280", marginBottom: action ? 18 : 0, lineHeight: 1.6 }}>{message}</p>}
       {action && (

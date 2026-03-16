@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { IWrench, IUser, IChevDown, ILogOut, ISettings, ICalendar, IShield } from "./Icons";
 import NotificationBell from "./NotificationBell";
+import AdminNotificationBell from "./AdminNotificationBell";
 import { getProfile } from "../services/api";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
@@ -32,8 +33,13 @@ export default function Navbar() {
     if (!token || !uname) { setUser(null); setRole(null); setAvatar(null); return; }
 
     setUser(uname);
-    setRole(localStorage.getItem("role"));
-    setIsStaff(localStorage.getItem("is_staff") === "true");
+    const storedRole = localStorage.getItem("role");
+    setRole(storedRole);
+    // isStaff can come from is_staff flag OR role being "admin"
+    setIsStaff(
+      localStorage.getItem("is_staff") === "true" ||
+      storedRole === "admin"
+    );
 
     // Use cached image first for instant display
     const cached = localStorage.getItem("profile_image");
@@ -51,7 +57,15 @@ export default function Navbar() {
       // Update initials in case name changed
       const letter = (d.first_name?.[0] || d.username?.[0] || "U").toUpperCase();
       setInitials(letter);
-      if (d.role) { setRole(d.role); localStorage.setItem("role", d.role); }
+      if (d.role) {
+        setRole(d.role);
+        localStorage.setItem("role", d.role);
+        // If API says role is "admin", also set is_staff flag
+        if (d.role === "admin" || d.is_staff) {
+          setIsStaff(true);
+          localStorage.setItem("is_staff", "true");
+        }
+      }
     } catch {
       // token may be expired — keep cached data, don't redirect here
     }
@@ -81,7 +95,7 @@ export default function Navbar() {
     navigate("/login");
   };
 
-  const roleLabel = role === "karigar" ? "Karigar" : "Customer";
+  const roleLabel = isStaff ? "Admin" : role === "karigar" ? "Karigar" : "Customer";
 
   // Avatar circle — shows photo if available, otherwise coloured initial
   const AvatarCircle = ({ size = 26, fontSize = 12 }) => (
@@ -134,6 +148,7 @@ export default function Navbar() {
         {user ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <NotificationBell />
+            {isStaff && <AdminNotificationBell />}
             <div ref={dropRef} style={{ position: "relative" }}>
             <button
               onClick={() => setOpen(o => !o)}
@@ -143,7 +158,7 @@ export default function Navbar() {
               <AvatarCircle size={28} />
               <div style={{ lineHeight: 1.25, textAlign: "left" }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-h)" }}>{user}</div>
-                <div style={{ fontSize: 11, color: "var(--primary)", fontWeight: 500 }}>{roleLabel}</div>
+                <div style={{ fontSize: 11, color: isStaff ? "#D97706" : "var(--primary)", fontWeight: 700 }}>{roleLabel}</div>
               </div>
               <IChevDown size={13} color="var(--text-p)" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
             </button>
@@ -155,7 +170,7 @@ export default function Navbar() {
                   <AvatarCircle size={36} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-h)" }}>{user}</div>
-                    <div style={{ fontSize: 11, color: "var(--primary)", fontWeight: 500, marginTop: 1 }}>{roleLabel}</div>
+                    <div style={{ fontSize: 11, color: isStaff ? "#D97706" : "var(--primary)", fontWeight: 700, marginTop: 1 }}>{roleLabel}</div>
                   </div>
                 </div>
                 <Link to="/profile" onClick={() => setOpen(false)}

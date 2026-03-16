@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { searchKarigars, getCategories } from "../services/api";
-import { ISearch, ICheckCirc } from "../components/Icons";
+import { ISearch, ICheckCirc, IPin, ICalendar, ISliders } from "../components/Icons";
 import { KarigarCardSkeleton, EmptyState } from "../components/Skeleton";
 import { formatNPR } from "../utils";
 
@@ -61,8 +61,8 @@ function KarigarCard({ k }) {
         </div>
       </div>
       <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:10 }}>
-        {k.district && <span style={{ fontSize:12,color:"var(--text-s)" }}>📍 {k.district}</span>}
-        {k.experience_years>0 && <span style={{ fontSize:12,color:"var(--text-s)" }}>🗓️ {k.experience_years} yr{k.experience_years!==1?"s":""}</span>}
+        {k.district && <span style={{ fontSize:12,color:"var(--text-s)",display:"inline-flex",alignItems:"center",gap:3 }}><IPin size={11} color="var(--text-s)"/> {k.district}</span>}
+        {k.experience_years>0 && <span style={{ fontSize:12,color:"var(--text-s)",display:"inline-flex",alignItems:"center",gap:3 }}><ICalendar size={11} color="var(--text-s)"/> {k.experience_years} yr{k.experience_years!==1?"s":""}</span>}
         {k.hourly_rate && <span style={{ fontSize:12,color:"var(--primary)",fontWeight:600 }}>{formatNPR(k.hourly_rate,"/hr")}</span>}
         <span style={{ fontSize:11,fontWeight:600,marginLeft:"auto",
           color:k.available?"#16A34A":"var(--text-p)",background:k.available?"#F0FDF4":"var(--bg-subtle)",
@@ -176,7 +176,7 @@ export default function Search() {
             style={{ padding:"9px 13px",borderRadius:8,border:`1.5px solid ${showFilt?"var(--primary)":"var(--border)"}`,
               background:showFilt?"var(--primary-bg)":"#fff",cursor:"pointer",fontSize:13,fontWeight:600,
               color:showFilt?"var(--primary)":"var(--text-s)",display:"flex",alignItems:"center",gap:5 }}>
-            ⚙️ Filters {activeFilt>0&&(
+            <ISliders size={13}/> Filters {activeFilt>0&&(
               <span style={{ width:17,height:17,borderRadius:"50%",background:"var(--primary)",color:"white",
                 fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
                 {activeFilt}
@@ -264,7 +264,7 @@ export default function Search() {
         ):results.length===0?(
           <div className="card" style={{ overflow:"hidden" }}>
             <EmptyState
-              emoji="🔍"
+              icon={<ISearch size={36} color="var(--text-p)"/>}
               title="No karigars found"
               message="Try different keywords, adjust filters, or search in a different district."
               action={activeFilt > 0 ? "Clear Filters" : null}

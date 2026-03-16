@@ -4,7 +4,7 @@ import {
   getMyKarigarProfile, createKarigarProfile, updateKarigarProfile,
   uploadGalleryImage, deleteGalleryImage, getCategories
 } from "../services/api";
-import { IEdit, ICamera, ICheckCirc, IAlertCirc } from "../components/Icons";
+import { IEdit, ICamera, ICheckCirc, IAlertCirc, ICheck, IClose, IImage } from "../components/Icons";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
 const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/")?r:"/media/"+r}`;
@@ -204,7 +204,7 @@ export default function KarigarDashboard() {
               <div style={{ display:"flex",gap:24,marginBottom:22,paddingBottom:18,
                 borderBottom:"1px solid var(--border)",flexWrap:"wrap" }}>
                 {[
-                  {label:"Avg Rating", val:parseFloat(kp.avg_rating||0).toFixed(1)+"★"},
+                  {label:"Avg Rating", val:parseFloat(kp.avg_rating||0).toFixed(1)+" / 5"},
                   {label:"Total Jobs",  val:kp.total_jobs||0},
                   {label:"Gallery",     val:(kp.gallery?.length||0)+" photos"},
                 ].map(({label,val}) => (
@@ -248,7 +248,7 @@ export default function KarigarDashboard() {
                             borderColor: on?"var(--primary)":"var(--border)",
                             background:  on?"var(--primary-bg)":"#fff",
                             color:       on?"var(--primary)":"var(--text-b)" }}>
-                          {on?"✓ ":""}{s.name}
+                          {on && <><ICheck size={11} color="var(--primary)"/> </>}{s.name}
                           {s.base_price ? ` (NPR ${parseFloat(s.base_price).toLocaleString()})` : ""}
                         </button>
                       );
@@ -298,7 +298,7 @@ export default function KarigarDashboard() {
               <div>
                 <LBL>Availability</LBL>
                 <div style={{ display:"flex",gap:8 }}>
-                  {[{val:true,label:"✓ Available for work"},{val:false,label:"○ Not currently available"}].map(o=>(
+                  {[{val:true,label:"Available for work"},{val:false,label:"Not currently available"}].map(o=>(
                     <button key={String(o.val)} type="button" onClick={()=>setAvail(o.val)}
                       style={{ flex:1,padding:"9px 12px",borderRadius:8,border:"1.5px solid",fontSize:13,fontWeight:600,
                         cursor:"pointer",transition:"all .15s",
@@ -366,7 +366,7 @@ export default function KarigarDashboard() {
               </h2>
               {gallery.length === 0 ? (
                 <div style={{ textAlign:"center",padding:"32px 0",color:"var(--text-p)" }}>
-                  <div style={{ fontSize:32,marginBottom:8 }}>🖼️</div>
+                  <div style={{ marginBottom:8 }}><IImage size={32} color="var(--text-p)"/></div>
                   <p style={{ fontSize:13 }}>No photos yet. Upload your work to attract more customers.</p>
                 </div>
               ) : (
@@ -387,7 +387,7 @@ export default function KarigarDashboard() {
                         style={{ position:"absolute",top:4,right:4,width:22,height:22,borderRadius:"50%",
                           background:"rgba(220,38,38,.85)",border:"none",color:"white",cursor:"pointer",
                           fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",
-                          fontWeight:700,lineHeight:1 }}>✕</button>
+                          display:"flex",alignItems:"center",justifyContent:"center" }}><IClose size={12} color="white"/></button>
                     </div>
                   ))}
                 </div>

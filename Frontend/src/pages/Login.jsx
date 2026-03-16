@@ -10,6 +10,7 @@ export default function Login() {
   const [showPw,     setShow] = useState(false);
   const [error,      setErr]  = useState("");
   const [loading,    setLoad] = useState(false);
+  const [banInfo,    setBan]  = useState(null);  // { reason, date }
 
   const submit = async () => {
     if (!identifier.trim()) { setErr("Please enter your phone number or email."); return; }
@@ -22,11 +23,19 @@ export default function Login() {
       localStorage.setItem("refresh_token", d.refresh);
       localStorage.setItem("username",      d.username);
       localStorage.setItem("user_id",       d.user_id);
-      localStorage.setItem("role",          d.role || "customer");
+      // Staff/superusers get role "admin"
+      const effectiveRole = (d.is_staff || d.role === "admin") ? "admin" : (d.role || "customer");
+      localStorage.setItem("role",          effectiveRole);
       localStorage.setItem("is_staff",      d.is_staff ? "true" : "false");
       navigate("/");
     } catch (err) {
-      setErr(err.response?.data?.error || "Incorrect phone/email or password.");
+      const d = err.response?.data;
+      if (d?.error === "banned") {
+        setBan({ reason: d.ban_reason, date: d.ban_date });
+        setErr("");
+      } else {
+        setErr(d?.message || d?.error || "Incorrect phone/email or password.");
+      }
     } finally { setLoad(false); }
   };
 
@@ -48,6 +57,34 @@ export default function Login() {
           Don't have an account?{" "}
           <Link to="/register" className="auth-link">Create one</Link>
         </p>
+
+        {/* Ban notice */}
+        {banInfo && (
+          <div style={{ marginBottom:16, padding:"16px", background:"#FEF2F2",
+            border:"1.5px solid #FECACA", borderRadius:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <IAlertCirc size={18} color="#DC2626"/>
+              <span style={{ fontSize:14, fontWeight:800, color:"#DC2626" }}>
+                Account Banned
+              </span>
+            </div>
+            <p style={{ fontSize:13, color:"#991B1B", marginBottom:6, lineHeight:1.6 }}>
+              Your account has been suspended by the administrator.
+            </p>
+            <div style={{ background:"#FEE2E2", borderRadius:7, padding:"10px 12px",
+              fontSize:13, color:"#7F1D1D", lineHeight:1.6 }}>
+              <strong>Reason:</strong> {banInfo.reason}
+            </div>
+            {banInfo.date && (
+              <p style={{ fontSize:11, color:"#DC2626", marginTop:6 }}>
+                Banned on: {banInfo.date}
+              </p>
+            )}
+            <p style={{ fontSize:12, color:"#991B1B", marginTop:8 }}>
+              Contact <strong>support@nepalkarigar.com.np</strong> to appeal.
+            </p>
+          </div>
+        )}
 
         {/* Error */}
         {error && (

@@ -5,12 +5,23 @@ import { ISearch } from "../components/Icons";
 import { EmptyState } from "../components/Skeleton";
 import { formatNPR } from "../utils";
 
-const EMOJI = {
-  "Electrical":"⚡","Plumbing":"🔧","Carpentry":"🪚","Painting":"🎨",
-  "Cleaning":"🧹","Masonry":"🧱","HVAC":"❄️","Landscaping":"🌿",
-  "Auto Repair":"🚗","Tailoring":"🧵","Welding":"🔩","IT/Tech":"💻","IT / Tech":"💻",
-};
-const catEmoji = (name, icon) => icon || EMOJI[name] || "🛠️";
+// Returns an SVG icon element for each service category
+function CatIcon({ name, size = 24, color = "#2563EB" }) {
+  const s = { size, color };
+  const n = (name||"").toLowerCase();
+  if (n.includes("electric")) return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>;
+  if (n.includes("plumb"))    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
+  if (n.includes("carp"))     return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg>;
+  if (n.includes("paint"))    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 13.5V20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-7.5"/><path d="M2 13.5 12 2l10 11.5"/><path d="M12 2v20"/></svg>;
+  if (n.includes("clean"))    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h.01M7 3h.01M11 3h.01M15 3h.01M19 3h.01M3 7h.01M7 7h.01M11 7h.01M15 7h.01M19 7h.01M3 11h.01M7 11h.01M11 11h.01"/><rect x="14" y="11" width="8" height="8" rx="1"/><path d="M14 15h8"/></svg>;
+  if (n.includes("mason"))    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>;
+  if (n.includes("land") || n.includes("garden")) return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22V12M12 12C12 7 17 4 17 4s1 4-1 8M12 12C12 7 7 4 7 4S6 8 8 12"/><path d="M5 22h14"/></svg>;
+  if (n.includes("auto") || n.includes("car"))    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 17H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4l2-3h4l2 3h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>;
+  if (n.includes("it") || n.includes("tech") || n.includes("comp")) return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>;
+  if (n.includes("tailor") || n.includes("cloth")) return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>;
+  // default
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
+}
 
 export default function Services() {
   const navigate = useNavigate();
@@ -70,7 +81,7 @@ export default function Services() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="card" style={{ overflow:"hidden" }}>
-            <EmptyState emoji="🔍" title="No categories found" message="No categories match your search." action={search ? "Clear Search" : null} onAction={() => setSearch("")}/>
+            <EmptyState icon={<ISearch size={34} color="var(--text-p)"/>} title="No categories found" message="No categories match your search." action={search ? "Clear Search" : null} onAction={() => setSearch("")}/>
           </div>
         ) : (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
@@ -88,7 +99,7 @@ export default function Services() {
                       <div style={{ width:44, height:44, borderRadius:11, background:"var(--primary-bg)",
                         border:"1.5px solid var(--primary-bd)", display:"flex", alignItems:"center",
                         justifyContent:"center", fontSize:21, flexShrink:0 }}>
-                        {catEmoji(cat.name, cat.icon)}
+                        <CatIcon name={cat.name} size={22} color="var(--primary)"/>
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>

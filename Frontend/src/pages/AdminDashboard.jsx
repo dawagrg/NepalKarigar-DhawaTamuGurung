@@ -4,8 +4,13 @@ import {
   adminGetStats, adminListUsers, adminToggleUser,
   adminListKarigars, adminVerifyKarigar, adminListBookings,
   adminListApplications, adminApproveApplication, adminRejectApplication,
+  adminGetNotifications, adminMarkNotificationsRead, adminClearNotifications,
+  adminListComplaints, adminRespondComplaint,
 } from "../services/api";
-import { IUser, IWrench, ICheckCirc, IAlertCirc, ISearch, IShield } from "../components/Icons";
+import { IUser, IWrench, ICheckCirc, IAlertCirc, ISearch, IShield,
+         IClipboard, IThumbsUp, IThumbsDown, IPhone, IPin, IMoney,
+         ISliders, IRefresh, ITool, ICheckSquare, ICloseCirc, IStar,
+         IBell, IClose, IAlertTri, IMessage, ISend } from "../components/Icons";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
 const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/") ? r : "/media/" + r}`;
@@ -116,10 +121,11 @@ function StatCard({ label, value, sub, color = "var(--primary)", icon }) {
 // ── Section tabs ──────────────────────────────────────────────────────────────
 const TABS = [
   { id: "overview",      label: "Overview" },
-  { id: "applications",  label: "📋 Applications" },
+  { id: "applications",  label: "Applications", icon: "clipboard" },
   { id: "users",         label: "Users" },
   { id: "karigars",      label: "Karigar Verification" },
   { id: "bookings",      label: "Bookings" },
+  { id: "complaints",    label: "Complaints" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -175,6 +181,7 @@ export default function AdminDashboard() {
         {tab === "users"         && <UsersTab />}
         {tab === "karigars"      && <KarigarsTab />}
         {tab === "bookings"      && <BookingsTab />}
+        {tab === "complaints"    && <ComplaintsTab />}
 
       </div>
     </div>
@@ -216,7 +223,7 @@ function ApplicationsTab() {
     setActing(appId); setMsg("");
     try {
       await adminApproveApplication(appId, {});
-      setMsg("✅ Application approved! SMS sent to karigar.");
+      setMsg("Application approved. SMS sent to karigar.");
       load(page);
       setSelected(null);
     } catch(e) { alert(e.response?.data?.error || "Failed to approve."); }
@@ -273,8 +280,7 @@ function ApplicationsTab() {
           style={{ width:"100%", padding:"8px 12px 8px 34px", borderRadius:8,
             border:"1.5px solid var(--border)", fontSize:13, outline:"none",
             background:"#fff", boxSizing:"border-box" }}/>
-        <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)",
-          fontSize:14, color:"var(--text-p)" }}>🔍</span>
+        <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", display:"flex" }}><ISearch size={13} color="var(--text-p)"/></span>
       </div>
 
       {msg && <div style={{ padding:"10px 14px", background:"#F0FDF4", border:"1.5px solid #BBF7D0",
@@ -284,7 +290,7 @@ function ApplicationsTab() {
         <div style={{ padding:"40px", textAlign:"center", color:"var(--text-p)", fontSize:13 }}>Loading applications…</div>
       ) : apps.length === 0 ? (
         <div style={{ padding:"48px", textAlign:"center" }}>
-          <div style={{ fontSize:40, marginBottom:10 }}>📋</div>
+          <div style={{ marginBottom:10 }}><IClipboard size={40} color="var(--text-p)"/></div>
           <p style={{ fontSize:14, color:"var(--text-s)" }}>No {statusFilt} applications.</p>
         </div>
       ) : (
@@ -309,7 +315,7 @@ function ApplicationsTab() {
                       {app.full_name}
                     </div>
                     <div style={{ fontSize:12, color:"var(--text-s)" }}>
-                      📞 {app.phone_number} &nbsp;•&nbsp; 🔧 {app.service_title || "—"} &nbsp;•&nbsp; 📍 {app.district}
+                      <IPhone size={12} color="var(--text-s)"/> {app.phone_number} &nbsp;•&nbsp; <ITool size={12} color="var(--text-s)"/> {app.service_title || "—"} &nbsp;•&nbsp; <IPin size={12} color="var(--text-s)"/> {app.district}
                     </div>
                   </div>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -387,8 +393,8 @@ function ApplicationsTab() {
                         <button onClick={()=>approve(app.id)} disabled={acting===app.id}
                           style={{ padding:"9px 20px", borderRadius:8, border:"none",
                             background:"#16A34A", color:"white", fontWeight:700,
-                            fontSize:13, cursor:"pointer" }}>
-                          ✓ Approve & Activate
+                            fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+                          <IThumbsUp size={13} color="white"/> Approve & Activate
                         </button>
                         <div style={{ flex:1, minWidth:200 }}>
                           <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)}
@@ -402,7 +408,7 @@ function ApplicationsTab() {
                             background:rejectNote.trim()?"#DC2626":"#FCA5A5",
                             color:"white", fontWeight:700, fontSize:13,
                             cursor:rejectNote.trim()?"pointer":"not-allowed" }}>
-                          ✗ Reject
+                          <IThumbsDown size={13} color="white"/> Reject
                         </button>
                       </div>
                     )}
@@ -476,12 +482,12 @@ function OverviewTab() {
         Bookings
       </h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 28 }}>
-        <StatCard label="Total Bookings" value={bookings.total}      sub={`+${bookings.new_this_week} this week`} color="var(--primary)" icon={<span style={{ fontSize: 18 }}>📋</span>} />
-        <StatCard label="Pending"        value={bookings.pending}     color="#D97706" icon={<span style={{ fontSize: 18 }}>⏳</span>} />
-        <StatCard label="Bargaining"     value={bookings.bargaining}  color="#7C3AED" icon={<span style={{ fontSize: 18 }}>💰</span>} />
-        <StatCard label="Accepted"       value={bookings.accepted}    color="#16A34A" icon={<span style={{ fontSize: 18 }}>✅</span>} />
-        <StatCard label="Completed"      value={bookings.completed}   color="#2563EB" icon={<span style={{ fontSize: 18 }}>🏁</span>} />
-        <StatCard label="Cancelled"      value={bookings.cancelled}   color="#6B7280" icon={<span style={{ fontSize: 18 }}>❌</span>} />
+        <StatCard label="Total Bookings" value={bookings.total}      sub={`+${bookings.new_this_week} this week`} color="var(--primary)" icon={<IClipboard size={20} color="var(--primary)"/>} />
+        <StatCard label="Pending"        value={bookings.pending}     color="#D97706" icon={<IClipboard size={18} color="currentColor"/>} />
+        <StatCard label="Bargaining"     value={bookings.bargaining}  color="#7C3AED" icon={<IMoney size={20} color="#16A34A"/>} />
+        <StatCard label="Accepted"       value={bookings.accepted}    color="#16A34A" icon={<ICheckSquare size={20} color="#2563EB"/>} />
+        <StatCard label="Completed"      value={bookings.completed}   color="#2563EB" icon={<IClipboard size={18} color="currentColor"/>} />
+        <StatCard label="Cancelled"      value={bookings.cancelled}   color="#6B7280" icon={<IClipboard size={18} color="currentColor"/>} />
       </div>
 
       {/* Other */}
@@ -489,8 +495,8 @@ function OverviewTab() {
         Platform
       </h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
-        <StatCard label="Service Categories" value={categories} color="#0891B2" icon={<span style={{ fontSize: 18 }}>🔧</span>} />
-        <StatCard label="Reviews"            value={reviews}    color="#D97706" icon={<span style={{ fontSize: 18 }}>⭐</span>} />
+        <StatCard label="Service Categories" value={categories} color="#0891B2" icon={<ITool size={20} color="#7C3AED"/>} />
+        <StatCard label="Reviews"            value={reviews}    color="#D97706" icon={<IStar size={20} color="#D97706" fill="#D97706"/>} />
         <StatCard label="Available Karigars" value={karigars.available} color="#16A34A" icon={<IWrench size={20} color="#16A34A" />} />
       </div>
     </div>
@@ -520,16 +526,37 @@ function UsersTab() {
   const onPage   = (p) => { setPage(p); load(p, search, role); };
   const onRole   = (r) => { setRole(r); setPage(1); load(1, search, r); };
 
-  const toggleUser = async (id) => {
+  const [banModal,    setBanModal]    = useState(null);  // { id, username }
+  const [banReason,   setBanReason]   = useState("");
+  const [banLoading,  setBanLoading]  = useState(false);
+
+  const handleBanClick = (u) => {
+    if (!u.is_active) {
+      // Unban — no reason needed
+      if (confirm(`Unban @${u.username}? Their account will be reactivated.`)) {
+        doToggle(u.id, "");
+      }
+    } else {
+      // Ban — show modal to enter reason
+      setBanModal({ id: u.id, username: u.username });
+      setBanReason("");
+    }
+  };
+
+  const doToggle = async (id, reason) => {
+    setBanLoading(true);
     try {
-      const res = await adminToggleUser(id);
-      setData(d => ({ ...d, results: d.results.map(u => u.id === id ? { ...u, is_active: res.data.is_active } : u) }));
+      const res = await adminToggleUser(id, reason ? { reason } : {});
+      setData(d => ({ ...d, results: d.results.map(u =>
+        u.id === id ? { ...u, is_active: res.data.is_active } : u
+      )}));
       setToast(res.data.message);
-      setTimeout(() => setToast(""), 3000);
+      setTimeout(() => setToast(""), 4000);
+      setBanModal(null); setBanReason("");
     } catch (e) {
       setToast(e.response?.data?.error || "Action failed.");
-      setTimeout(() => setToast(""), 3000);
-    }
+      setTimeout(() => setToast(""), 4000);
+    } finally { setBanLoading(false); }
   };
 
   return (
@@ -615,9 +642,7 @@ function UsersTab() {
                   </td>
                   <td style={{ padding: "10px 14px" }}>
                     {!u.is_staff && (
-                      <button onClick={() => {
-                        if (confirm(`${u.is_active ? "Ban" : "Unban"} @${u.username}?`)) toggleUser(u.id);
-                      }}
+                      <button onClick={() => handleBanClick(u)}
                         style={{
                           padding: "5px 12px", borderRadius: 7, border: "1.5px solid",
                           borderColor: u.is_active ? "var(--danger)" : "#16A34A",
@@ -636,6 +661,79 @@ function UsersTab() {
         </div>
       )}
       <Pagination page={data.page} pages={data.pages} onPage={onPage} />
+
+      {/* ── Ban Reason Modal ─────────────────────────────────────────────── */}
+      {banModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:1000,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div style={{ background:"white", borderRadius:14, padding:"28px 24px",
+            maxWidth:460, width:"100%", boxShadow:"0 20px 60px rgba(0,0,0,0.25)" }}>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:36, height:36, borderRadius:"50%", background:"#FEF2F2",
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <IAlertTri size={18} color="#DC2626"/>
+                </div>
+                <h2 style={{ fontSize:17, fontWeight:800, color:"#111827" }}>Ban User</h2>
+              </div>
+              <button onClick={() => { setBanModal(null); setBanReason(""); }}
+                style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
+                <IClose size={18} color="var(--text-p)"/>
+              </button>
+            </div>
+            {/* Body */}
+            <div style={{ background:"#FFF7F7", border:"1px solid #FECACA", borderRadius:9,
+              padding:"12px 14px", marginBottom:16 }}>
+              <p style={{ fontSize:13, color:"#7F1D1D", lineHeight:1.6, margin:0 }}>
+                You are about to ban <strong>@{banModal.username}</strong>.
+                They will be <strong>unable to log in</strong> and will receive an
+                SMS notification with the ban reason.
+              </p>
+            </div>
+            <div style={{ marginBottom:18 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:"var(--text-p)",
+                display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                Reason for Ban <span style={{ color:"#DC2626" }}>*</span>
+              </label>
+              <textarea
+                value={banReason}
+                onChange={e => setBanReason(e.target.value)}
+                rows={3}
+                placeholder="e.g. Fraudulent activity, spam messages, violation of platform terms…"
+                style={{ width:"100%", padding:"10px 12px", borderRadius:8, fontSize:13,
+                  border:`1.5px solid ${banReason.trim() ? "var(--border)" : "#FECACA"}`,
+                  outline:"none", resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }}
+                autoFocus
+              />
+              {!banReason.trim() && (
+                <p style={{ fontSize:11, color:"#DC2626", marginTop:4, display:"flex", alignItems:"center", gap:4 }}>
+                  <IAlertTri size={11} color="#DC2626"/> A reason is required — it will be shown to the user on login.
+                </p>
+              )}
+            </div>
+            {/* Actions */}
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={() => { setBanModal(null); setBanReason(""); }}
+                style={{ flex:1, padding:"11px", borderRadius:9,
+                  border:"1.5px solid var(--border)", background:"#fff",
+                  fontWeight:700, fontSize:13, cursor:"pointer", color:"var(--text-s)" }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => doToggle(banModal.id, banReason)}
+                disabled={!banReason.trim() || banLoading}
+                style={{ flex:1, padding:"11px", borderRadius:9, border:"none",
+                  background: banReason.trim() ? "#DC2626" : "#FCA5A5",
+                  color:"white", fontWeight:700, fontSize:13,
+                  cursor: banReason.trim() ? "pointer" : "not-allowed",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                {banLoading ? "Banning…" : "Confirm Ban"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -726,7 +824,7 @@ function KarigarsTab() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-h)" }}>{k.full_name}</span>
                   <span style={{ fontSize: 12, color: "var(--text-p)" }}>@{k.username}</span>
-                  {k.is_verified && <Badge label="✓ Verified" color="#16A34A" bg="#F0FDF4" bd="#BBF7D0" />}
+                  {k.is_verified && <Badge label="Verified" color="#16A34A" bg="#F0FDF4" bd="#BBF7D0" />}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-s)", marginTop: 3 }}>
                   {k.category || "No category"}{k.district ? ` · ${k.district}` : ""}
@@ -751,7 +849,7 @@ function KarigarsTab() {
                     background: k.is_verified ? "#FEF2F2" : "#F0FDF4",
                     fontWeight: 700, fontSize: 12, cursor: "pointer",
                   }}>
-                  {k.is_verified ? "Unverify" : "✓ Verify"}
+                  {k.is_verified ? "Unverify" : "Verify"}
                 </button>
               </div>
             </div>
@@ -845,7 +943,7 @@ function BookingsTab() {
                     <td style={{ padding: "10px 14px" }}>
                       <Badge label={st.label} color={st.color} bg={st.bg} bd={st.bd} />
                       {b.bargain_status && b.bargain_status !== "none" && (
-                        <div style={{ fontSize: 10, color: "#7C3AED", marginTop: 3 }}>💰 {b.bargain_status.replace("_", " ")}</div>
+                        <div style={{ fontSize: 10, color: "#7C3AED", marginTop: 3 }}><IMoney size={11}/> {b.bargain_status.replace("_", " ")}</div>
                       )}
                     </td>
                     <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--text-h)", whiteSpace: "nowrap" }}>
@@ -859,6 +957,335 @@ function BookingsTab() {
         </div>
       )}
       <Pagination page={data.page} pages={data.pages} onPage={onPage} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPLAINTS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function ComplaintsTab() {
+  const [comps,      setComps]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [statusFilt, setStatusFilt] = useState("pending");
+  const [search,     setSearch]     = useState("");
+  const [page,       setPage]       = useState(1);
+  const [meta,       setMeta]       = useState({ total:0, pages:1, counts:{} });
+  const [selected,   setSelected]   = useState(null);
+  const [response,   setResponse]   = useState("");
+  const [action,     setAction]     = useState("");
+  const [newStatus,  setNewStatus]  = useState("resolved");
+  const [acting,     setActing]     = useState(false);
+  const [msg,        setMsg]        = useState("");
+
+  const MEDIA_BASE = "http://127.0.0.1:8000";
+  const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/") ? r : "/media/" + r}`;
+
+  const STATUS_CLR = {
+    pending:   { color:"#D97706", bg:"#FFFBEB", bd:"#FDE68A"  },
+    reviewing: { color:"#2563EB", bg:"#EFF6FF", bd:"#BFDBFE"  },
+    resolved:  { color:"#16A34A", bg:"#F0FDF4", bd:"#BBF7D0"  },
+    dismissed: { color:"#6B7280", bg:"#F9FAFB", bd:"#E5E7EB"  },
+  };
+
+  const CAT_LABELS = {
+    poor_work:"Poor Quality Work", misbehaviour:"Misbehaviour", fraud:"Fraud/Scam",
+    no_show:"No Show", overcharging:"Overcharging", damage:"Property Damage",
+    late_payment:"Late/No Payment", harassment:"Harassment", other:"Other",
+  };
+
+  const load = useCallback((p=1) => {
+    setLoading(true);
+    adminListComplaints({ status:statusFilt, search, page:p })
+      .then(r => {
+        setComps(r.data.results || []);
+        setMeta({ total:r.data.count, pages:r.data.pages, counts:r.data.counts||{} });
+        setPage(p);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [statusFilt, search]);
+
+  useEffect(() => { load(1); }, [statusFilt]);
+
+  const respond = async (compId) => {
+    if (!response.trim()) { alert("Please enter a response message."); return; }
+    setActing(true); setMsg("");
+    try {
+      await adminRespondComplaint(compId, {
+        status:         newStatus,
+        admin_response: response,
+        action_taken:   action,
+      });
+      setMsg(`Response sent! SMS delivered to complainant.`);
+      setSelected(null); setResponse(""); setAction(""); setNewStatus("resolved");
+      load(page);
+    } catch(e) {
+      setMsg(e.response?.data?.error || "Failed to send response.");
+    } finally { setActing(false); }
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+        marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <h2 style={{ fontSize:16, fontWeight:800, color:"var(--text-h)" }}>
+          User Complaints
+        </h2>
+        {/* Status counts */}
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {["pending","reviewing","resolved","dismissed"].map(s => {
+            const st = STATUS_CLR[s];
+            const count = meta.counts[s] || 0;
+            return (
+              <button key={s} onClick={()=>{ setStatusFilt(s); setSelected(null); }}
+                style={{ padding:"5px 12px", borderRadius:20, border:`1.5px solid`,
+                  fontSize:12, fontWeight:700, cursor:"pointer",
+                  borderColor: statusFilt===s ? st.color : "var(--border)",
+                  background:  statusFilt===s ? st.bg    : "#fff",
+                  color:       statusFilt===s ? st.color : "var(--text-s)" }}>
+                {s.charAt(0).toUpperCase()+s.slice(1)} {count > 0 && `(${count})`}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ position:"relative", marginBottom:14, maxWidth:340 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          onKeyDown={e=>e.key==="Enter" && load(1)}
+          placeholder="Search username or complaint…"
+          style={{ width:"100%", padding:"8px 12px 8px 34px", borderRadius:8,
+            border:"1.5px solid var(--border)", fontSize:13, outline:"none",
+            background:"#fff", boxSizing:"border-box" }}/>
+        <span style={{ position:"absolute", left:10, top:"50%",
+          transform:"translateY(-50%)", display:"flex" }}>
+          <ISearch size={13} color="var(--text-p)"/>
+        </span>
+      </div>
+
+      {msg && (
+        <div style={{ padding:"10px 14px", background:"#F0FDF4", border:"1.5px solid #BBF7D0",
+          borderRadius:9, marginBottom:12, fontSize:13, color:"#16A34A", fontWeight:600 }}>
+          {msg}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ padding:"48px", textAlign:"center", color:"var(--text-p)", fontSize:13 }}>
+          Loading complaints…
+        </div>
+      ) : comps.length === 0 ? (
+        <div style={{ padding:"56px", textAlign:"center" }}>
+          <IAlertTri size={40} color="var(--text-p)"/>
+          <p style={{ fontSize:14, color:"var(--text-s)", marginTop:10 }}>
+            No {statusFilt} complaints.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {comps.map(comp => {
+            const s   = STATUS_CLR[comp.status] || STATUS_CLR.pending;
+            const exp = selected === comp.id;
+            return (
+              <div key={comp.id} className="card" style={{ overflow:"hidden" }}>
+
+                {/* Complaint header */}
+                <div style={{ padding:"14px 16px", cursor:"pointer", display:"flex",
+                  gap:12, alignItems:"flex-start", flexWrap:"wrap" }}
+                  onClick={() => setSelected(exp ? null : comp.id)}>
+                  {/* Complainant → Accused */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:13, fontWeight:700, color:"var(--text-h)" }}>
+                        @{comp.complainant_username}
+                      </span>
+                      <span style={{ fontSize:11, color:"var(--text-p)",
+                        background:"var(--bg-subtle)", padding:"1px 6px", borderRadius:20 }}>
+                        {comp.complainant_role}
+                      </span>
+                      <span style={{ fontSize:12, color:"var(--text-p)" }}>complained about</span>
+                      <span style={{ fontSize:13, fontWeight:700, color:"#DC2626" }}>
+                        @{comp.accused_username}
+                      </span>
+                      <span style={{ fontSize:11, color:"var(--text-p)",
+                        background:"var(--bg-subtle)", padding:"1px 6px", borderRadius:20 }}>
+                        {comp.accused_role}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:13, fontWeight:600, color:"var(--text-b)", marginBottom:4 }}>
+                      {comp.title}
+                    </div>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+                      <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11,
+                        fontWeight:700, background:"#FEF2F2", color:"#DC2626", border:"1px solid #FECACA" }}>
+                        {CAT_LABELS[comp.category] || comp.category}
+                      </span>
+                      <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11,
+                        fontWeight:700, background:s.bg, color:s.color, border:`1px solid ${s.bd}` }}>
+                        {comp.status.charAt(0).toUpperCase()+comp.status.slice(1)}
+                      </span>
+                      <span style={{ fontSize:11, color:"var(--text-p)" }}>{comp.created_at}</span>
+                      {comp.booking_id && (
+                        <span style={{ fontSize:11, color:"var(--text-p)" }}>
+                          Booking #{comp.booking_id}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span style={{ color:"var(--text-p)", fontSize:14, flexShrink:0 }}>{exp?"▲":"▼"}</span>
+                </div>
+
+                {/* Expanded detail */}
+                {exp && (
+                  <div style={{ borderTop:"1px solid var(--border)", padding:"16px" }}>
+
+                    {/* Description */}
+                    <div style={{ background:"var(--bg-subtle)", borderRadius:9,
+                      padding:"12px 14px", marginBottom:14, border:"1px solid var(--border)" }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:"var(--text-p)",
+                        textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6 }}>
+                        Description
+                      </p>
+                      <p style={{ fontSize:13, color:"var(--text-b)", lineHeight:1.7, margin:0 }}>
+                        {comp.description}
+                      </p>
+                    </div>
+
+                    {/* Evidence photo */}
+                    {comp.evidence && (
+                      <div style={{ marginBottom:14 }}>
+                        <p style={{ fontSize:11, fontWeight:700, color:"var(--text-p)",
+                          textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6 }}>
+                          Evidence
+                        </p>
+                        <a href={imgUrl(comp.evidence)} target="_blank" rel="noopener noreferrer">
+                          <img src={imgUrl(comp.evidence)} alt="Evidence"
+                            style={{ maxWidth:240, maxHeight:160, borderRadius:8, objectFit:"cover",
+                              border:"1.5px solid var(--border)", cursor:"pointer" }}/>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Previous admin response */}
+                    {comp.admin_response && (
+                      <div style={{ background:"#F0FDF4", border:"1.5px solid #BBF7D0",
+                        borderRadius:9, padding:"12px 14px", marginBottom:14 }}>
+                        <p style={{ fontSize:11, fontWeight:700, color:"#16A34A",
+                          textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4 }}>
+                          Previous Response by {comp.reviewed_by || "Admin"}
+                        </p>
+                        <p style={{ fontSize:13, color:"#065F46", lineHeight:1.6, margin:0 }}>
+                          {comp.admin_response}
+                        </p>
+                        {comp.action_taken && (
+                          <p style={{ fontSize:12, fontWeight:700, color:"#065F46", marginTop:6 }}>
+                            Action Taken: {comp.action_taken}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Admin response form */}
+                    {comp.status !== "resolved" && comp.status !== "dismissed" && (
+                      <div style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A",
+                        borderRadius:10, padding:"16px" }}>
+                        <p style={{ fontSize:13, fontWeight:700, color:"#92400E", marginBottom:14,
+                          display:"flex", alignItems:"center", gap:6 }}>
+                          <IMessage size={14} color="#92400E"/> Respond to Complaint
+                        </p>
+
+                        {/* New status */}
+                        <div style={{ marginBottom:12 }}>
+                          <label style={{ fontSize:11, fontWeight:700, color:"#92400E",
+                            display:"block", marginBottom:5, textTransform:"uppercase" }}>
+                            Update Status
+                          </label>
+                          <select value={newStatus} onChange={e=>setNewStatus(e.target.value)}
+                            style={{ width:"100%", padding:"9px 11px", borderRadius:8,
+                              border:"1.5px solid #FDE68A", fontSize:13, background:"#fff",
+                              outline:"none", cursor:"pointer" }}>
+                            <option value="reviewing">Under Review</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="dismissed">Dismissed</option>
+                          </select>
+                        </div>
+
+                        {/* Response message */}
+                        <div style={{ marginBottom:12 }}>
+                          <label style={{ fontSize:11, fontWeight:700, color:"#92400E",
+                            display:"block", marginBottom:5, textTransform:"uppercase" }}>
+                            Response Message * <span style={{ fontWeight:400, fontSize:10 }}>
+                              (sent via SMS to complainant)
+                            </span>
+                          </label>
+                          <textarea
+                            value={response}
+                            onChange={e=>setResponse(e.target.value)}
+                            rows={3}
+                            placeholder="Explain what action was taken or why the complaint was dismissed…"
+                            style={{ width:"100%", padding:"9px 11px", borderRadius:8,
+                              border:"1.5px solid #FDE68A", fontSize:13, outline:"none",
+                              resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }}
+                          />
+                        </div>
+
+                        {/* Action taken */}
+                        <div style={{ marginBottom:14 }}>
+                          <label style={{ fontSize:11, fontWeight:700, color:"#92400E",
+                            display:"block", marginBottom:5, textTransform:"uppercase" }}>
+                            Action Taken Against Accused
+                          </label>
+                          <select value={action} onChange={e=>setAction(e.target.value)}
+                            style={{ width:"100%", padding:"9px 11px", borderRadius:8,
+                              border:"1.5px solid #FDE68A", fontSize:13, background:"#fff",
+                              outline:"none", cursor:"pointer" }}>
+                            <option value="">No action taken</option>
+                            <option value="Warning issued">Warning Issued</option>
+                            <option value="Account temporarily suspended">Temporarily Suspended</option>
+                            <option value="Account permanently banned">Permanently Banned</option>
+                            <option value="Refund issued">Refund Issued</option>
+                            <option value="Mediation conducted">Mediation Conducted</option>
+                            <option value="Dismissed - insufficient evidence">Dismissed (Insufficient Evidence)</option>
+                            <option value="Dismissed - false complaint">Dismissed (False Complaint)</option>
+                          </select>
+                        </div>
+
+                        <button onClick={() => respond(comp.id)} disabled={acting||!response.trim()}
+                          style={{ width:"100%", padding:"10px", borderRadius:9, border:"none",
+                            background: response.trim() ? "#D97706" : "#FDE68A",
+                            color: response.trim() ? "white" : "#92400E",
+                            fontWeight:700, fontSize:13,
+                            cursor: response.trim() ? "pointer" : "not-allowed",
+                            display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                          <ISend size={13} color={response.trim()?"white":"#92400E"}/>
+                          {acting ? "Sending…" : "Send Response & Notify User via SMS"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {meta.pages > 1 && (
+        <div style={{ display:"flex", justifyContent:"center", gap:6, marginTop:20 }}>
+          {Array.from({length:meta.pages},(_,i)=>i+1).map(p=>(
+            <button key={p} onClick={()=>load(p)}
+              style={{ padding:"6px 12px", borderRadius:8, border:"1.5px solid",
+                borderColor:p===page?"var(--primary)":"var(--border)",
+                background:p===page?"var(--primary)":"#fff",
+                color:p===page?"white":"var(--text-h)",
+                cursor:"pointer", fontSize:13, fontWeight:600 }}>{p}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
