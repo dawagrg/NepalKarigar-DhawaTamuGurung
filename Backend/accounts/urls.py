@@ -63,6 +63,20 @@ urlpatterns = [
     path("admin/karigars/<int:pk>/verify/",      views.admin_verify_karigar,     name="admin_verify"),
     path("admin/bookings/",                      views.admin_list_bookings,      name="admin_bookings"),
 
+    # ── Admin Notifications ───────────────────────────────────────────────────
+    path("admin/notifications/",               views.admin_get_notifications,        name="admin_notifs"),
+    path("admin/notifications/read/",          views.admin_mark_notifications_read,  name="admin_notifs_read"),
+    path("admin/notifications/clear/",         views.admin_clear_notifications,      name="admin_notifs_clear"),
+
+    # ── Complaints ───────────────────────────────────────────────────────────────
+    path("complaints/",               views.submit_complaint,        name="submit_complaint"),
+    path("complaints/my/",            views.list_my_complaints,      name="my_complaints"),
+    path("complaints/status/",        views.check_complaint_status,  name="complaint_status"),
+
+    # ── Admin: Complaints ─────────────────────────────────────────────────────
+    path("admin/complaints/",                           views.admin_list_complaints,    name="admin_complaints"),
+    path("admin/complaints/<int:complaint_id>/respond/",views.admin_respond_complaint,  name="admin_respond_complaint"),
+
     # ── Admin: Applications ───────────────────────────────────────────────────
     path("admin/applications/",                      views.admin_list_applications,      name="admin_applications"),
     path("admin/applications/<int:app_id>/approve/", views.admin_approve_application,    name="admin_approve_app"),

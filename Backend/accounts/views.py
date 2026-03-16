@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import (
     User, PasswordResetToken, ServiceCategory, SubService,
     KarigarProfile, KarigarGallery, Booking, Review, KarigarApplication,
+    AdminNotification, Complaint,
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -35,6 +36,8 @@ def _user_data(user, request=None):
         kp_id = user.karigar_profile.id
     except Exception:
         pass
+    # Staff/superusers show "admin" role regardless of their user.role field
+    effective_role = "admin" if (user.is_staff or user.is_superuser) else user.role
     return {
         "user_id":       user.id,
         "username":      user.username,
@@ -42,7 +45,7 @@ def _user_data(user, request=None):
         "last_name":     user.last_name,
         "email":         user.email,
         "phone_number":  user.phone_number,
-        "role":          user.role,
+        "role":          effective_role,
         "bio":           user.bio,
         "address":       user.address,
         "profile_image": img,
@@ -111,11 +114,15 @@ def _booking_data(b, request=None):
 
     return {
         "id":               b.id,
+        "customer_id":      b.user.id,
         "customer_name":    f"{b.user.first_name} {b.user.last_name}".strip() or b.user.username,
         "customer_username":b.user.username,
+        "customer_phone":   b.user.phone_number,
         "customer_image":   cust_img,
+        "karigar_user_id":  b.karigar.id,
         "karigar_name":     f"{b.karigar.first_name} {b.karigar.last_name}".strip() or b.karigar.username,
         "karigar_username": b.karigar.username,
+        "karigar_phone":    b.karigar.phone_number,
         "karigar_image":    kar_img,
         "karigar_profile_id": _get_karigar_profile_id(b.karigar),
         "sub_service_id":   b.sub_service.id   if b.sub_service else None,
@@ -184,6 +191,13 @@ def register_user(request):
             "message": "Account created. Please complete your verification application.",
         }, status=201)
 
+    _create_admin_notification(
+        type_="new_user",
+        title=f"New {role.title()} Registered",
+        message=f"{user.first_name or user.username} ({user.phone_number}) registered as a {role}.",
+        link="/admin-dashboard",
+        ref_user_id=user.id,
+    )
     return Response({**_tokens(user), **_user_data(user, request)}, status=201)
 
 
@@ -195,20 +209,39 @@ def login_user(request):
     if not identifier or not password:
         return Response({"error": "Phone/email and password are required."}, status=400)
 
-    user = authenticate(username=identifier, password=password)
-    if user is None:
+    # ── Step 1: Find the user object by username / phone / email ────────────
+    # We do this BEFORE authenticate() because Django's authenticate()
+    # returns None for inactive (banned) users — we need to check is_active
+    # ourselves to return a proper ban message instead of "incorrect credentials".
+    user_obj = None
+    try:
+        user_obj = User.objects.get(username=identifier)
+    except User.DoesNotExist:
         for field in ("phone_number", "email"):
             try:
-                obj = User.objects.get(**{field: identifier})
-                user = authenticate(username=obj.username, password=password)
-                if user:
-                    break
+                user_obj = User.objects.get(**{field: identifier})
+                break
             except User.DoesNotExist:
                 pass
+
+    if user_obj is None:
+        return Response({"error": "Incorrect credentials."}, status=401)
+
+    # ── Step 2: Check if banned BEFORE authenticating ─────────────────────
+    if not user_obj.is_active:
+        reason   = user_obj.ban_reason or "No reason provided."
+        ban_date = user_obj.ban_date.strftime("%Y-%m-%d") if user_obj.ban_date else ""
+        return Response({
+            "error":      "banned",
+            "message":    "Your account has been banned by the administrator.",
+            "ban_reason": reason,
+            "ban_date":   ban_date,
+        }, status=403)
+
+    # ── Step 3: Verify password ───────────────────────────────────────────
+    user = authenticate(username=user_obj.username, password=password)
     if user is None:
         return Response({"error": "Incorrect credentials."}, status=401)
-    if not user.is_active:
-        return Response({"error": "Your account has been suspended. Please contact support."}, status=403)
 
     return Response({**_tokens(user), **_user_data(user, request)})
 
@@ -360,7 +393,7 @@ def list_karigars_by_category(request, category_id):
     except ServiceCategory.DoesNotExist:
         return Response({"error": "Category not found."}, status=404)
     kps = KarigarProfile.objects.filter(
-        category=cat, available=True
+        category=cat, available=True, user__is_active=True
     ).select_related("user", "category")
     return Response([_karigar_data(kp, request) for kp in kps])
 
@@ -368,9 +401,11 @@ def list_karigars_by_category(request, category_id):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def list_karigars(request):
+    # Only show karigars whose accounts are active (approved by admin)
     return Response(
         [_karigar_data(kp, request)
-         for kp in KarigarProfile.objects.select_related("user", "category").all()]
+         for kp in KarigarProfile.objects.select_related("user", "category")
+                                         .filter(user__is_active=True)]
     )
 
 
@@ -387,7 +422,8 @@ def karigar_public_profile(request, pk):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def search_karigars(request):
-    qs = KarigarProfile.objects.select_related("user", "category").prefetch_related("sub_services")
+    # Only show karigars with active (admin-approved) accounts
+    qs = KarigarProfile.objects.select_related("user", "category").prefetch_related("sub_services").filter(user__is_active=True)
 
     q          = request.query_params.get("q", "").strip()
     category   = request.query_params.get("category", "")
@@ -627,6 +663,13 @@ def create_booking(request):
         offered_rate=offered_rate if offered_rate else None,
         bargain_status=bargain_status,
     )
+    _create_admin_notification(
+        type_="new_booking",
+        title="New Booking Created",
+        message=f"{request.user.username} booked karigar {kp.user.username}.",
+        link="/admin-dashboard",
+        ref_booking_id=booking.id,
+    )
     return Response(_booking_data(booking, request), status=201)
 
 
@@ -674,7 +717,7 @@ def cancel_booking(request, pk):
         return Response({"error": f"Cannot cancel a {b.status} booking."}, status=400)
 
     b.status = "cancelled"
-    b.save(update_fields=["status", "updated_at"])
+    b.save()
     return Response(_booking_data(b, request))
 
 
@@ -790,7 +833,7 @@ def bargain_accept_counter(request, pk):
 
     b.final_rate    = b.counter_rate
     b.status        = "accepted"
-    b.bargain_status= "accepted"
+    b.bargain_status = "agreed"   # model choices: none/customer_offered/karigar_countered/agreed
     b.save()
     return Response(_booking_data(b, request))
 
@@ -821,7 +864,7 @@ def mark_booking_complete(request, pk):
         )
 
     booking.status = "completed"
-    booking.save(update_fields=["status", "updated_at"])
+    booking.save()
 
     try:
         kp = KarigarProfile.objects.get(user=request.user)
@@ -829,6 +872,13 @@ def mark_booking_complete(request, pk):
     except KarigarProfile.DoesNotExist:
         pass
 
+    _create_admin_notification(
+        type_="booking_complete",
+        title="Booking Completed",
+        message=f"{request.user.username} marked booking with {booking.user.username} as completed.",
+        link="/admin-dashboard",
+        ref_booking_id=booking.id,
+    )
     return Response(_booking_data(booking, request))
 
 
@@ -846,12 +896,15 @@ def admin_stats(request):
     if not _is_admin(request.user):
         return Response({"error": "Admin access required."}, status=403)
 
-    total_users     = User.objects.count()
-    total_customers = User.objects.filter(role="customer").count()
-    total_karigars  = User.objects.filter(role="karigar").count()
-    verified_kgs    = KarigarProfile.objects.filter(is_verified=True).count()
-    unverified_kgs  = KarigarProfile.objects.filter(is_verified=False).count()
-    available_kgs   = KarigarProfile.objects.filter(available=True).count()
+    total_users          = User.objects.count()
+    total_customers      = User.objects.filter(role="customer").count()
+    total_karigars       = User.objects.filter(role="karigar").count()
+    active_karigars      = User.objects.filter(role="karigar", is_active=True).count()
+    pending_karigars     = User.objects.filter(role="karigar", is_active=False).count()
+    verified_kgs         = KarigarProfile.objects.filter(is_verified=True).count()
+    unverified_kgs       = KarigarProfile.objects.filter(is_verified=False).count()
+    available_kgs        = KarigarProfile.objects.filter(available=True).count()
+    pending_applications = KarigarApplication.objects.filter(status="pending").count()
 
     total_bookings      = Booking.objects.count()
     pending_bookings    = Booking.objects.filter(status="pending").count()
@@ -874,12 +927,15 @@ def admin_stats(request):
             "total":         total_users,
             "customers":     total_customers,
             "karigars":      total_karigars,
+            "active_karigars":  active_karigars,
+            "pending_karigars": pending_karigars,
             "new_this_week": new_users_week,
         },
         "karigars": {
-            "verified":   verified_kgs,
-            "unverified": unverified_kgs,
-            "available":  available_kgs,
+            "verified":              verified_kgs,
+            "unverified":            unverified_kgs,
+            "available":             available_kgs,
+            "pending_applications":  pending_applications,
         },
         "bookings": {
             "total":         total_bookings,
@@ -966,13 +1022,39 @@ def admin_toggle_user_active(request, pk):
         user = User.objects.get(pk=pk)
     except User.DoesNotExist:
         return Response({"error": "User not found."}, status=404)
-    user.is_active = not user.is_active
+
+    is_banning = user.is_active  # True → we are about to ban
+
+    if is_banning:
+        # Require a reason when banning
+        reason = request.data.get("reason", "").strip()
+        if not reason:
+            return Response({"error": "Please provide a reason for banning this user."}, status=400)
+        user.ban_reason = reason
+        user.ban_date   = dj_timezone.now()
+        user.is_active  = False
+        # Send SMS notification to the banned user
+        sms_msg = (
+            f"Dear {user.first_name or user.username}, your NepalKarigar account has been "
+            f"suspended. Reason: {reason}. "
+            f"Contact support@nepalkarigar.com.np for assistance."
+        )
+        _send_sms_notification(user.phone_number, sms_msg)
+    else:
+        # Unbanning — clear ban fields
+        user.ban_reason = None
+        user.ban_date   = None
+        user.is_active  = True
+
     user.save()
+
+    action = "banned" if is_banning else "unbanned"
     return Response({
-        "id":        user.id,
-        "username":  user.username,
-        "is_active": user.is_active,
-        "message":   "User activated." if user.is_active else "User banned.",
+        "id":         user.id,
+        "username":   user.username,
+        "is_active":  user.is_active,
+        "ban_reason": user.ban_reason or "",
+        "message":    f"User {action} successfully.",
     })
 
 
@@ -1130,13 +1212,11 @@ def _review_data(r, request=None):
 
 def _recalc_karigar_stats(kp):
     """Recalculate avg_rating and total_jobs after any review change."""
-    reviews = Review.objects.filter(karigar=kp.user)
-    count   = reviews.count()
-    if count > 0:
-        total = sum(r.rating for r in reviews)
-        kp.avg_rating = round(total / count, 2)
-    else:
-        kp.avg_rating = 0.00
+    from django.db.models import Avg as _Avg
+    # Use DB aggregate — efficient, no memory load
+    result = Review.objects.filter(karigar=kp).aggregate(avg=_Avg("rating"))
+    avg = result["avg"]
+    kp.avg_rating = round(float(avg), 2) if avg is not None else 0.00
     kp.total_jobs = Booking.objects.filter(karigar=kp.user, status="completed").count()
     kp.save(update_fields=["avg_rating", "total_jobs"])
 
@@ -1179,20 +1259,28 @@ def submit_review(request, booking_id):
     except ValueError:
         return Response({"error": "Rating must be between 1 and 5."}, status=400)
 
+    # booking.karigar is a User — get their KarigarProfile for Review.karigar FK
+    try:
+        karigar_profile = KarigarProfile.objects.get(user=booking.karigar)
+    except KarigarProfile.DoesNotExist:
+        return Response({"error": "Karigar profile not found."}, status=404)
+
     review = Review.objects.create(
         user=request.user,
-        karigar=booking.karigar,
+        karigar=karigar_profile,
         booking=booking,
         rating=rating,
         comment=comment,
     )
 
-    try:
-        kp = KarigarProfile.objects.get(user=booking.karigar)
-        _recalc_karigar_stats(kp)
-    except KarigarProfile.DoesNotExist:
-        pass
+    _recalc_karigar_stats(karigar_profile)
 
+    _create_admin_notification(
+        type_="review_posted",
+        title="New Review Posted",
+        message=f"{request.user.username} rated {karigar_profile.user.username} {review.rating} stars.",
+        link="/admin-dashboard",
+    )
     return Response(_review_data(review, request), status=201)
 
 
@@ -1281,12 +1369,8 @@ def edit_review(request, review_id):
     review.comment = comment
     review.save()
 
-    try:
-        kp = KarigarProfile.objects.get(user=review.karigar)
-        _recalc_karigar_stats(kp)
-    except KarigarProfile.DoesNotExist:
-        pass
-
+    # review.karigar IS a KarigarProfile instance — use it directly
+    _recalc_karigar_stats(review.karigar)
     return Response(_review_data(review, request))
 
 
@@ -1302,15 +1386,9 @@ def delete_review(request, review_id):
     except Review.DoesNotExist:
         return Response({"error": "Review not found."}, status=404)
 
-    karigar = review.karigar
+    kp = review.karigar   # review.karigar IS a KarigarProfile
     review.delete()
-
-    try:
-        kp = KarigarProfile.objects.get(user=karigar)
-        _recalc_karigar_stats(kp)
-    except KarigarProfile.DoesNotExist:
-        pass
-
+    _recalc_karigar_stats(kp)
     return Response({"message": "Review deleted."})
 
 
@@ -1488,8 +1566,14 @@ def submit_karigar_application(request):
         status             = "pending",
     )
 
-    # Notify admin (console in dev)
     print(f"\n🔔 NEW KARIGAR APPLICATION: {user.username} ({user.phone_number})\n")
+    _create_admin_notification(
+        type_="new_application",
+        title="New Karigar Application",
+        message=f"{app.full_name} ({user.phone_number}) submitted a karigar verification application.",
+        link="/admin-dashboard",
+        ref_user_id=user.id,
+    )
 
     return Response({
         "success":   True,
@@ -1661,3 +1745,417 @@ def admin_reject_application(request, app_id):
         "message": f"Application rejected. SMS sent to {app.user.phone_number}.",
         "app":     _application_data(app, request),
     })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ADMIN NOTIFICATIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _create_admin_notification(type_, title, message, link="", ref_user_id=None, ref_booking_id=None):
+    """Helper to create an admin notification. Called from anywhere in views."""
+    AdminNotification.objects.create(
+        type=type_,
+        title=title,
+        message=message,
+        link=link or "/admin-dashboard",
+        ref_user_id=ref_user_id,
+        ref_booking_id=ref_booking_id,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_get_notifications(request):
+    """
+    GET /api/accounts/admin/notifications/?unread_only=true&page=
+    Returns admin notifications (new applications, new users, bookings, etc.)
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    qs = AdminNotification.objects.all()
+    unread_only = request.query_params.get("unread_only", "") == "true"
+    if unread_only:
+        qs = qs.filter(is_read=False)
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = 20
+    except ValueError:
+        page = 1
+
+    total   = qs.count()
+    unread  = AdminNotification.objects.filter(is_read=False).count()
+    start   = (page - 1) * page_size
+    notifs  = qs[start: start + page_size]
+
+    def _n(n):
+        return {
+            "id":             n.id,
+            "type":           n.type,
+            "title":          n.title,
+            "message":        n.message,
+            "link":           n.link,
+            "is_read":        n.is_read,
+            "created_at":     n.created_at.isoformat(),
+            "ref_user_id":    n.ref_user_id,
+            "ref_booking_id": n.ref_booking_id,
+        }
+
+    return Response({
+        "count":        total,
+        "unread_count": unread,
+        "page":         page,
+        "pages":        (total + page_size - 1) // page_size,
+        "results":      [_n(n) for n in notifs],
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def admin_mark_notifications_read(request):
+    """
+    POST /api/accounts/admin/notifications/read/
+    Body: { ids: [1,2,3] } or {} to mark ALL as read
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    ids = request.data.get("ids", [])
+    if ids:
+        AdminNotification.objects.filter(id__in=ids).update(is_read=True)
+    else:
+        AdminNotification.objects.filter(is_read=False).update(is_read=True)
+
+    unread = AdminNotification.objects.filter(is_read=False).count()
+    return Response({"message": "Marked as read.", "unread_count": unread})
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def admin_clear_notifications(request):
+    """DELETE /api/accounts/admin/notifications/clear/ — delete all read notifications"""
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+    deleted, _ = AdminNotification.objects.filter(is_read=True).delete()
+    return Response({"message": f"Cleared {deleted} read notifications."})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  COMPLAINT SYSTEM
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _complaint_data(comp, request=None):
+    """Serialise a Complaint for API responses."""
+    def img(field):
+        return _abs_url(request, field.url) if field else None
+
+    complainant_img = None
+    if comp.complainant.profile_image:
+        complainant_img = _abs_url(request, comp.complainant.profile_image.url)
+    accused_img = None
+    if comp.accused.profile_image:
+        accused_img = _abs_url(request, comp.accused.profile_image.url)
+
+    return {
+        "id":               comp.id,
+        # Complainant info
+        "complainant_id":       comp.complainant.id,
+        "complainant_username": comp.complainant.username,
+        "complainant_name":     f"{comp.complainant.first_name} {comp.complainant.last_name}".strip() or comp.complainant.username,
+        "complainant_role":     comp.complainant.role,
+        "complainant_image":    complainant_img,
+        # Accused info
+        "accused_id":           comp.accused.id,
+        "accused_username":     comp.accused.username,
+        "accused_name":         f"{comp.accused.first_name} {comp.accused.last_name}".strip() or comp.accused.username,
+        "accused_role":         comp.accused.role,
+        "accused_image":        accused_img,
+        # Booking reference
+        "booking_id":           comp.booking.id if comp.booking else None,
+        # Complaint details
+        "category":             comp.category,
+        "title":                comp.title,
+        "description":          comp.description,
+        "evidence":             img(comp.evidence),
+        # Status & admin response
+        "status":               comp.status,
+        "admin_response":       comp.admin_response,
+        "action_taken":         comp.action_taken,
+        "reviewed_by":          comp.reviewed_by.username if comp.reviewed_by else None,
+        # Timestamps
+        "created_at":           comp.created_at.strftime("%Y-%m-%d %H:%M"),
+        "updated_at":           comp.updated_at.strftime("%Y-%m-%d %H:%M"),
+        "resolved_at":          comp.resolved_at.strftime("%Y-%m-%d %H:%M") if comp.resolved_at else None,
+    }
+
+
+# ── Submit a complaint ─────────────────────────────────────────────────────────
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_complaint(request):
+    """
+    POST /api/accounts/complaints/
+    Customer or karigar submits a complaint against the other party.
+    Supports multipart/form-data (optional evidence image).
+    """
+    user = request.user
+    data = request.data
+
+    accused_id = data.get("accused_id")
+    category   = data.get("category", "").strip()
+    title      = data.get("title", "").strip()
+    description= data.get("description", "").strip()
+    booking_id = data.get("booking_id")
+
+    # Validate required fields
+    if not accused_id:
+        return Response({"error": "accused_id is required."}, status=400)
+    if not category:
+        return Response({"error": "Category is required."}, status=400)
+    if not title:
+        return Response({"error": "Title is required."}, status=400)
+    if not description or len(description) < 10:
+        return Response({"error": "Please provide a detailed description (min 10 characters)."}, status=400)
+
+    # Get accused user
+    try:
+        accused = User.objects.get(pk=accused_id)
+    except User.DoesNotExist:
+        return Response({"error": "Accused user not found."}, status=404)
+
+    # Prevent self-complaint
+    if accused.id == user.id:
+        return Response({"error": "You cannot file a complaint against yourself."}, status=400)
+
+    # Customers can only complain about karigars and vice versa
+    valid_pairs = {
+        "customer": "karigar",
+        "karigar":  "customer",
+    }
+    user_role   = user.role if not (user.is_staff or user.is_superuser) else None
+    if user_role and accused.role not in (valid_pairs.get(user_role, []), "admin"):
+        if accused.role == user_role:
+            return Response({"error": f"You cannot complain about another {user_role}."}, status=400)
+
+    # Get booking reference (optional)
+    booking = None
+    if booking_id:
+        try:
+            booking = Booking.objects.get(pk=booking_id)
+            # Verify the booking involves both parties
+            if not (
+                (booking.user == user and booking.karigar == accused) or
+                (booking.karigar == user and booking.user == accused)
+            ):
+                booking = None  # not related — ignore silently
+        except Booking.DoesNotExist:
+            pass
+
+    # Create complaint
+    comp = Complaint.objects.create(
+        complainant  = user,
+        accused      = accused,
+        booking      = booking,
+        category     = category,
+        title        = title,
+        description  = description,
+        evidence     = request.FILES.get("evidence"),
+        status       = "pending",
+    )
+
+    # Notify admin
+    _create_admin_notification(
+        type_="report",
+        title=f"New Complaint: {comp.get_category_display()}",
+        message=(
+            f"{user.username} ({user.role}) filed a complaint against "
+            f"{accused.username} ({accused.role}): \"{title[:80]}\""
+        ),
+        link="/admin-dashboard",
+        ref_user_id=accused.id,
+    )
+
+    return Response(_complaint_data(comp, request), status=201)
+
+
+# ── List my complaints ─────────────────────────────────────────────────────────
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_my_complaints(request):
+    """
+    GET /api/accounts/complaints/my/
+    Returns complaints filed BY the current user.
+    """
+    comps = Complaint.objects.filter(complainant=request.user).order_by("-created_at")
+    return Response([_complaint_data(c, request) for c in comps])
+
+
+# ── Admin: List all complaints ─────────────────────────────────────────────────
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_list_complaints(request):
+    """
+    GET /api/accounts/admin/complaints/?status=&search=&page=
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    qs     = Complaint.objects.select_related(
+                 "complainant", "accused", "booking", "reviewed_by"
+             ).order_by("-created_at")
+
+    status = request.query_params.get("status", "").strip()
+    search = request.query_params.get("search", "").strip()
+
+    if status in ("pending", "reviewing", "resolved", "dismissed"):
+        qs = qs.filter(status=status)
+    if search:
+        qs = qs.filter(
+            Q(complainant__username__icontains=search) |
+            Q(accused__username__icontains=search)    |
+            Q(title__icontains=search)                |
+            Q(description__icontains=search)
+        )
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = 15
+    except ValueError:
+        page = 1
+
+    total  = qs.count()
+    start  = (page - 1) * page_size
+    comps  = qs[start: start + page_size]
+
+    # Counts per status for badges
+    counts = {
+        "pending":   Complaint.objects.filter(status="pending").count(),
+        "reviewing": Complaint.objects.filter(status="reviewing").count(),
+        "resolved":  Complaint.objects.filter(status="resolved").count(),
+        "dismissed": Complaint.objects.filter(status="dismissed").count(),
+        "total":     Complaint.objects.count(),
+    }
+
+    return Response({
+        "count":   total,
+        "page":    page,
+        "pages":   (total + page_size - 1) // page_size,
+        "counts":  counts,
+        "results": [_complaint_data(c, request) for c in comps],
+    })
+
+
+# ── Admin: Respond to a complaint ─────────────────────────────────────────────
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def admin_respond_complaint(request, complaint_id):
+    """
+    POST /api/accounts/admin/complaints/<id>/respond/
+    Body: {
+        status:         "reviewing" | "resolved" | "dismissed",
+        admin_response: "...",
+        action_taken:   "Warning issued" | "Banned" | "Dismissed" | ...
+    }
+    Sends SMS to complainant with the admin's response.
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    try:
+        comp = Complaint.objects.select_related("complainant", "accused").get(pk=complaint_id)
+    except Complaint.DoesNotExist:
+        return Response({"error": "Complaint not found."}, status=404)
+
+    new_status     = request.data.get("status", comp.status)
+    admin_response = request.data.get("admin_response", "").strip()
+    action_taken   = request.data.get("action_taken", "").strip()
+
+    if new_status not in ("pending", "reviewing", "resolved", "dismissed"):
+        return Response({"error": "Invalid status."}, status=400)
+
+    if not admin_response:
+        return Response({"error": "Admin response message is required."}, status=400)
+
+    comp.status         = new_status
+    comp.admin_response = admin_response
+    comp.action_taken   = action_taken
+    comp.reviewed_by    = request.user
+
+    if new_status in ("resolved", "dismissed"):
+        comp.resolved_at = dj_timezone.now()
+
+    comp.save()
+
+    # Send SMS to complainant
+    status_label = {
+        "reviewing": "is now under review",
+        "resolved":  "has been resolved",
+        "dismissed": "has been dismissed",
+    }.get(new_status, "has been updated")
+
+    sms_msg = (
+        f"Dear {comp.complainant.first_name or comp.complainant.username}, "
+        f"your complaint against {comp.accused.username} {status_label}. "
+        f"Admin message: {admin_response[:100]}. "
+        f"Action taken: {action_taken or 'None'}. "
+        f"NepalKarigar Support."
+    )
+    _send_sms_notification(comp.complainant.phone_number, sms_msg)
+
+    # Also notify the accused user via SMS if action was taken against them
+    if action_taken and new_status == "resolved":
+        accused_sms = (
+            f"Dear {comp.accused.first_name or comp.accused.username}, "
+            f"a complaint was filed against you on NepalKarigar. "
+            f"Admin decision: {admin_response[:100]}. "
+            f"Action: {action_taken}. "
+            f"Contact support@nepalkarigar.com.np for queries."
+        )
+        _send_sms_notification(comp.accused.phone_number, accused_sms)
+
+    # Create notification in the regular notification system for complainant
+    # (they'll see it in their notification bell next time they load)
+    # We store this as a special "report" type in AdminNotification for audit trail
+    _create_admin_notification(
+        type_="report",
+        title=f"Complaint #{comp.id} Updated",
+        message=f"Admin responded to complaint by {comp.complainant.username}: {action_taken or new_status}",
+        link="/admin-dashboard",
+        ref_user_id=comp.complainant.id,
+    )
+
+    return Response({
+        "success":  True,
+        "message":  f"Response sent. SMS delivered to {comp.complainant.phone_number}.",
+        "complaint": _complaint_data(comp, request),
+    })
+
+
+# ── Check if user has complained about a specific booking ─────────────────────
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def check_complaint_status(request):
+    """
+    GET /api/accounts/complaints/status/?accused_id=&booking_id=
+    Check if current user already complained about a user/booking.
+    """
+    accused_id = request.query_params.get("accused_id")
+    booking_id = request.query_params.get("booking_id")
+
+    qs = Complaint.objects.filter(complainant=request.user)
+    if accused_id:
+        qs = qs.filter(accused_id=accused_id)
+    if booking_id:
+        qs = qs.filter(booking_id=booking_id)
+
+    comp = qs.first()
+    if comp:
+        return Response({
+            "has_complaint": True,
+            "complaint_id":  comp.id,
+            "status":        comp.status,
+            "admin_response":comp.admin_response,
+            "action_taken":  comp.action_taken,
+        })
+    return Response({"has_complaint": False})

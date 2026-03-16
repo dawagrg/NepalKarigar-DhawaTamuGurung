@@ -16,6 +16,11 @@ class User(AbstractUser):
     role          = models.CharField(max_length=20, choices=ROLE_CHOICES, default='customer')
     bio           = models.TextField(blank=True, null=True)
     address       = models.CharField(max_length=255, blank=True, null=True)
+    # Ban tracking
+    ban_reason    = models.TextField(blank=True, null=True,
+                        help_text="Reason given by admin when banning this account")
+    ban_date      = models.DateTimeField(null=True, blank=True,
+                        help_text="When the account was banned")
 
     def __str__(self):
         return f"{self.username} ({self.role})"
@@ -235,3 +240,106 @@ class KarigarApplication(models.Model):
 
     def __str__(self):
         return f"Application: {self.user.username} — {self.status}"
+
+
+# ── Admin Notifications ───────────────────────────────────────────────────────
+class AdminNotification(models.Model):
+    TYPE_CHOICES = [
+        ('new_application',  'New Karigar Application'),
+        ('new_booking',      'New Booking'),
+        ('new_user',         'New User Registered'),
+        ('review_posted',    'New Review Posted'),
+        ('booking_complete', 'Booking Completed'),
+        ('report',           'User Report'),
+    ]
+    type       = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    title      = models.CharField(max_length=200)
+    message    = models.TextField()
+    link       = models.CharField(max_length=100, blank=True,
+                    help_text="Frontend route to navigate to, e.g. /admin-dashboard")
+    is_read    = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+    # Optional reference IDs
+    ref_user_id    = models.IntegerField(null=True, blank=True)
+    ref_booking_id = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.type}] {self.title}"
+
+
+# ── Complaint System ──────────────────────────────────────────────────────────
+class Complaint(models.Model):
+    STATUS_CHOICES = [
+        ('pending',    'Pending Review'),
+        ('reviewing',  'Under Review'),
+        ('resolved',   'Resolved'),
+        ('dismissed',  'Dismissed'),
+    ]
+    CATEGORY_CHOICES = [
+        ('poor_work',      'Poor Quality Work'),
+        ('misbehaviour',   'Misbehaviour / Rude'),
+        ('fraud',          'Fraud / Scam'),
+        ('no_show',        'Did Not Show Up'),
+        ('overcharging',   'Overcharging'),
+        ('damage',         'Property Damage'),
+        ('late_payment',   'Late / No Payment'),
+        ('harassment',     'Harassment'),
+        ('other',          'Other'),
+    ]
+
+    # Who is complaining
+    complainant    = models.ForeignKey(
+                         User, on_delete=models.CASCADE,
+                         related_name='complaints_made'
+                     )
+    # Who is being complained about
+    accused        = models.ForeignKey(
+                         User, on_delete=models.CASCADE,
+                         related_name='complaints_received'
+                     )
+    # Related booking (optional but recommended)
+    booking        = models.ForeignKey(
+                         'Booking', on_delete=models.SET_NULL,
+                         null=True, blank=True,
+                         related_name='complaints'
+                     )
+    category       = models.CharField(
+                         max_length=30, choices=CATEGORY_CHOICES
+                     )
+    title          = models.CharField(max_length=200)
+    description    = models.TextField()
+    evidence       = models.ImageField(
+                         upload_to='complaints/evidence/',
+                         null=True, blank=True,
+                         help_text='Optional screenshot or photo evidence'
+                     )
+    status         = models.CharField(
+                         max_length=20, choices=STATUS_CHOICES,
+                         default='pending'
+                     )
+    # Admin response
+    admin_response = models.TextField(
+                         blank=True,
+                         help_text='Action taken / response sent to complainant'
+                     )
+    action_taken   = models.CharField(
+                         max_length=100, blank=True,
+                         help_text='e.g. Banned, Warning issued, Dismissed'
+                     )
+    reviewed_by    = models.ForeignKey(
+                         User, on_delete=models.SET_NULL,
+                         null=True, blank=True,
+                         related_name='complaints_reviewed'
+                     )
+    created_at     = models.DateTimeField(default=timezone.now)
+    updated_at     = models.DateTimeField(auto_now=True)
+    resolved_at    = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.category}] {self.complainant.username} → {self.accused.username} ({self.status})"

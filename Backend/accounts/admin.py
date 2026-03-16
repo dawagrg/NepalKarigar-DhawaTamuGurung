@@ -6,6 +6,7 @@ from .models import (
     ServiceCategory, SubService,
     KarigarProfile, KarigarGallery,
     Booking, Review, KarigarApplication,
+    AdminNotification, Complaint,
 )
 
 
@@ -146,3 +147,22 @@ class KarigarApplicationAdmin(admin.ModelAdmin):
     def phone_display(self, obj):
         return obj.user.phone_number
     phone_display.short_description = "Phone"
+
+
+# ── Admin Notification ────────────────────────────────────────────────────────
+@admin.register(AdminNotification)
+class AdminNotificationAdmin(admin.ModelAdmin):
+    list_display  = ('type', 'title', 'is_read', 'created_at')
+    list_filter   = ('type', 'is_read')
+    ordering      = ('-created_at',)
+    readonly_fields = ('created_at',)
+
+
+# ── Complaint ─────────────────────────────────────────────────────────────────
+@admin.register(Complaint)
+class ComplaintAdmin(admin.ModelAdmin):
+    list_display  = ('complainant', 'accused', 'category', 'title', 'status', 'created_at')
+    list_filter   = ('status', 'category')
+    search_fields = ('complainant__username', 'accused__username', 'title')
+    ordering      = ('-created_at',)
+    readonly_fields = ('created_at', 'updated_at')
