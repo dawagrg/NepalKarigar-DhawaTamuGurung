@@ -9,7 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import (
     User, PasswordResetToken, ServiceCategory, SubService,
     KarigarProfile, KarigarGallery, Booking, Review, KarigarApplication,
-    AdminNotification, Complaint,
+    AdminNotification, Complaint, ContactMessage,
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -886,6 +886,23 @@ def mark_booking_complete(request, pk):
 #  SPRINT 4 — ADMIN DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ── Public Platform Stats (for Home page hero section) ───────────────────────
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_stats(request):
+    """
+    GET /api/accounts/public-stats/
+    Returns non-sensitive platform statistics for the Home page.
+    No authentication required.
+    """
+    return Response({
+        "users":    User.objects.filter(is_active=True).count(),
+        "bookings": Booking.objects.count(),
+        "karigars": KarigarProfile.objects.filter(is_verified=True).count(),
+        "reviews":  Review.objects.count(),
+    })
+
+
 def _is_admin(user):
     return user.is_staff or user.is_superuser
 
@@ -896,9 +913,10 @@ def admin_stats(request):
     if not _is_admin(request.user):
         return Response({"error": "Admin access required."}, status=403)
 
-    total_users          = User.objects.count()
-    total_customers      = User.objects.filter(role="customer").count()
-    total_karigars       = User.objects.filter(role="karigar").count()
+    # Exclude staff/superusers from regular user counts
+    total_users          = User.objects.filter(is_staff=False, is_superuser=False).count()
+    total_customers      = User.objects.filter(role="customer", is_staff=False).count()
+    total_karigars       = User.objects.filter(role="karigar",  is_staff=False).count()
     active_karigars      = User.objects.filter(role="karigar", is_active=True).count()
     pending_karigars     = User.objects.filter(role="karigar", is_active=False).count()
     verified_kgs         = KarigarProfile.objects.filter(is_verified=True).count()
@@ -958,7 +976,8 @@ def admin_list_users(request):
     if not _is_admin(request.user):
         return Response({"error": "Admin access required."}, status=403)
 
-    qs     = User.objects.all().order_by("-date_joined")
+    # Exclude staff/superusers from the user management list
+    qs     = User.objects.filter(is_staff=False, is_superuser=False).order_by("-date_joined")
     role   = request.query_params.get("role", "")
     search = request.query_params.get("search", "").strip()
 
@@ -988,13 +1007,15 @@ def admin_list_users(request):
             kp_id = u.karigar_profile.id
         except Exception:
             pass
+        # Staff/superusers show as "admin" regardless of stored role field
+        effective_role = "admin" if (u.is_staff or u.is_superuser) else u.role
         return {
             "id":                 u.id,
             "username":           u.username,
             "full_name":          f"{u.first_name} {u.last_name}".strip() or u.username,
             "email":              u.email,
             "phone_number":       u.phone_number,
-            "role":               u.role,
+            "role":               effective_role,
             "is_active":          u.is_active,
             "is_staff":           u.is_staff,
             "date_joined":        u.date_joined.strftime("%Y-%m-%d"),
@@ -1421,7 +1442,7 @@ def get_notifications(request):
                 notifs.append({"id": f"b{b.id}_completed", "type": "info",    "msg": f"Job with {kname} is complete. Leave a review!", "booking_id": b.id, "ts": b.updated_at.isoformat()})
             elif b.bargain_status == "karigar_countered":
                 notifs.append({"id": f"b{b.id}_counter",   "type": "bargain", "msg": f"{kname} sent a counter offer.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
-    else:
+    elif user.role == "karigar":
         bookings = Booking.objects.filter(karigar=user, updated_at__gte=cutoff).order_by("-updated_at")[:20]
         for b in bookings:
             cname = f"{b.user.first_name} {b.user.last_name}".strip() or b.user.username
@@ -1431,8 +1452,31 @@ def get_notifications(request):
                 notifs.append({"id": f"b{b.id}_offer",     "type": "bargain", "msg": f"{cname} sent a rate offer.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
             elif b.status == "cancelled":
                 notifs.append({"id": f"b{b.id}_cancelled", "type": "error",   "msg": f"{cname} cancelled their booking.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
+            elif b.status == "accepted":
+                notifs.append({"id": f"b{b.id}_accepted_k", "type": "success", "msg": f"You accepted booking from {cname}.", "booking_id": b.id, "ts": b.updated_at.isoformat()})
 
-    return Response({"count": len(notifs), "results": notifs})
+    # Complaint update notifications — for both roles
+    complaints_updated = Complaint.objects.filter(
+        complainant=user,
+        status__in=("resolved", "dismissed", "reviewing"),
+        updated_at__gte=cutoff
+    ).order_by("-updated_at")[:10]
+    for comp in complaints_updated:
+        status_msg = {
+            "reviewing": "is now under review",
+            "resolved":  "has been resolved",
+            "dismissed": "has been dismissed",
+        }.get(comp.status, "was updated")
+        notifs.append({
+            "id":   f"comp{comp.id}_{comp.status}",
+            "type": "success" if comp.status == "resolved" else "info",
+            "msg":  f"Your complaint against {comp.accused.username} {status_msg}.",
+            "ts":   comp.updated_at.isoformat(),
+        })
+
+    # Sort all notifications by timestamp
+    notifs.sort(key=lambda x: x["ts"], reverse=True)
+    return Response({"count": len(notifs), "results": notifs[:25]})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2159,3 +2203,146 @@ def check_complaint_status(request):
             "action_taken":  comp.action_taken,
         })
     return Response({"has_complaint": False})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CONTACT MESSAGES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def submit_contact_message(request):
+    """
+    POST /api/accounts/contact/
+    Anyone (logged in or not) can send a contact message.
+    """
+    name    = request.data.get("name", "").strip()
+    email   = request.data.get("email", "").strip()
+    subject = request.data.get("subject", "").strip()
+    message = request.data.get("message", "").strip()
+
+    # Validate
+    if not name:
+        return Response({"error": "Name is required."}, status=400)
+    if not email or "@" not in email:
+        return Response({"error": "A valid email address is required."}, status=400)
+    if not subject:
+        return Response({"error": "Subject is required."}, status=400)
+    if not message or len(message) < 10:
+        return Response({"error": "Message must be at least 10 characters."}, status=400)
+
+    msg = ContactMessage.objects.create(
+        name=name, email=email, subject=subject, message=message
+    )
+
+    # Notify admin
+    _create_admin_notification(
+        type_="report",
+        title=f"New Contact Message: {subject[:60]}",
+        message=f"{name} ({email}) sent a message: \"{message[:80]}{'...' if len(message)>80 else ''}\"",
+        link="/admin-dashboard",
+    )
+
+    # Print to console for dev awareness
+    print(f"\n📧 CONTACT MESSAGE FROM: {name} <{email}>")
+    print(f"   Subject : {subject}")
+    print(f"   Message : {message[:100]}")
+    print()
+
+    return Response({
+        "success": True,
+        "message": "Your message has been sent! We will get back to you soon.",
+        "id":      msg.id,
+    }, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_list_contact_messages(request):
+    """
+    GET /api/accounts/admin/contact-messages/?unread_only=true&page=
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+
+    qs = ContactMessage.objects.all()
+
+    unread_only = request.query_params.get("unread_only", "") == "true"
+    if unread_only:
+        qs = qs.filter(is_read=False)
+
+    search = request.query_params.get("search", "").strip()
+    if search:
+        qs = qs.filter(
+            Q(name__icontains=search) |
+            Q(email__icontains=search) |
+            Q(subject__icontains=search) |
+            Q(message__icontains=search)
+        )
+
+    try:
+        page      = max(1, int(request.query_params.get("page", 1)))
+        page_size = 15
+    except ValueError:
+        page = 1
+
+    total = qs.count()
+    unread_count = ContactMessage.objects.filter(is_read=False).count()
+    start = (page - 1) * page_size
+    msgs  = qs[start: start + page_size]
+
+    def _m(m):
+        return {
+            "id":         m.id,
+            "name":       m.name,
+            "email":      m.email,
+            "subject":    m.subject,
+            "message":    m.message,
+            "is_read":    m.is_read,
+            "replied":    m.replied,
+            "created_at": m.created_at.strftime("%Y-%m-%d %H:%M"),
+        }
+
+    return Response({
+        "count":        total,
+        "unread_count": unread_count,
+        "page":         page,
+        "pages":        (total + page_size - 1) // page_size,
+        "results":      [_m(m) for m in msgs],
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def admin_mark_contact_read(request, msg_id):
+    """
+    POST /api/accounts/admin/contact-messages/<id>/read/
+    Mark a contact message as read.
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+    try:
+        msg = ContactMessage.objects.get(pk=msg_id)
+    except ContactMessage.DoesNotExist:
+        return Response({"error": "Message not found."}, status=404)
+
+    msg.is_read = True
+    msg.replied = request.data.get("replied", msg.replied)
+    msg.save()
+    return Response({"success": True, "is_read": msg.is_read, "replied": msg.replied})
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def admin_delete_contact_message(request, msg_id):
+    """
+    DELETE /api/accounts/admin/contact-messages/<id>/delete/
+    """
+    if not _is_admin(request.user):
+        return Response({"error": "Admin access required."}, status=403)
+    try:
+        msg = ContactMessage.objects.get(pk=msg_id)
+        msg.delete()
+        return Response({"success": True, "message": "Message deleted."})
+    except ContactMessage.DoesNotExist:
+        return Response({"error": "Message not found."}, status=404)

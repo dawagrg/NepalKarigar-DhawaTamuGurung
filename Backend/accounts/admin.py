@@ -6,7 +6,7 @@ from .models import (
     ServiceCategory, SubService,
     KarigarProfile, KarigarGallery,
     Booking, Review, KarigarApplication,
-    AdminNotification, Complaint,
+    AdminNotification, Complaint, ContactMessage,
 )
 
 
@@ -166,3 +166,13 @@ class ComplaintAdmin(admin.ModelAdmin):
     search_fields = ('complainant__username', 'accused__username', 'title')
     ordering      = ('-created_at',)
     readonly_fields = ('created_at', 'updated_at')
+
+
+# ── Contact Message ───────────────────────────────────────────────────────────
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    list_display  = ('name', 'email', 'subject', 'is_read', 'replied', 'created_at')
+    list_filter   = ('is_read', 'replied')
+    search_fields = ('name', 'email', 'subject')
+    ordering      = ('-created_at',)
+    readonly_fields = ('created_at',)

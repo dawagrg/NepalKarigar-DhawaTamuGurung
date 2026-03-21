@@ -16,6 +16,7 @@ urlpatterns = [
     path("change-password/",       views.change_password,        name="change_password"),
 
     # ── Categories & Karigar Search ───────────────────────────────────────────
+    path("public-stats/",          views.public_stats,            name="public_stats"),
     path("categories/",            views.list_categories,        name="categories"),
     path("karigars/",              views.list_karigars,          name="karigars"),
     path("karigars/search/",       views.search_karigars,        name="search_karigars"),
@@ -67,6 +68,12 @@ urlpatterns = [
     path("admin/notifications/",               views.admin_get_notifications,        name="admin_notifs"),
     path("admin/notifications/read/",          views.admin_mark_notifications_read,  name="admin_notifs_read"),
     path("admin/notifications/clear/",         views.admin_clear_notifications,      name="admin_notifs_clear"),
+
+    # ── Contact Messages ─────────────────────────────────────────────────────────
+    path("contact/",                                        views.submit_contact_message,       name="contact"),
+    path("admin/contact-messages/",                         views.admin_list_contact_messages,  name="admin_contact"),
+    path("admin/contact-messages/<int:msg_id>/read/",       views.admin_mark_contact_read,      name="admin_contact_read"),
+    path("admin/contact-messages/<int:msg_id>/delete/",     views.admin_delete_contact_message, name="admin_contact_delete"),
 
     # ── Complaints ───────────────────────────────────────────────────────────────
     path("complaints/",               views.submit_complaint,        name="submit_complaint"),
