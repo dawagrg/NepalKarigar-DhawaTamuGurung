@@ -6,11 +6,12 @@ import {
   adminListApplications, adminApproveApplication, adminRejectApplication,
   adminGetNotifications, adminMarkNotificationsRead, adminClearNotifications,
   adminListComplaints, adminRespondComplaint,
+  adminListContactMessages, adminMarkContactRead, adminDeleteContactMessage,
 } from "../services/api";
 import { IUser, IWrench, ICheckCirc, IAlertCirc, ISearch, IShield,
          IClipboard, IThumbsUp, IThumbsDown, IPhone, IPin, IMoney,
          ISliders, IRefresh, ITool, ICheckSquare, ICloseCirc, IStar,
-         IBell, IClose, IAlertTri, IMessage, ISend } from "../components/Icons";
+         IBell, IClose, IAlertTri, IMessage, ISend, IMail } from "../components/Icons";
 
 const MEDIA_BASE = "http://127.0.0.1:8000";
 const imgUrl = r => !r ? null : r.startsWith("http") ? r : `${MEDIA_BASE}${r.startsWith("/") ? r : "/media/" + r}`;
@@ -126,6 +127,7 @@ const TABS = [
   { id: "karigars",      label: "Karigar Verification" },
   { id: "bookings",      label: "Bookings" },
   { id: "complaints",    label: "Complaints" },
+  { id: "messages",      label: "Messages" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,6 +184,7 @@ export default function AdminDashboard() {
         {tab === "karigars"      && <KarigarsTab />}
         {tab === "bookings"      && <BookingsTab />}
         {tab === "complaints"    && <ComplaintsTab />}
+        {tab === "messages"      && <MessagesTab />}
 
       </div>
     </div>
@@ -1282,6 +1285,282 @@ function ComplaintsTab() {
                 borderColor:p===page?"var(--primary)":"var(--border)",
                 background:p===page?"var(--primary)":"#fff",
                 color:p===page?"white":"var(--text-h)",
+                cursor:"pointer", fontSize:13, fontWeight:600 }}>{p}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MESSAGES TAB — Contact form submissions from About Us page
+// ─────────────────────────────────────────────────────────────────────────────
+function MessagesTab() {
+  const [msgs,       setMsgs]       = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [unread,     setUnread]     = useState(0);
+  const [page,       setPage]       = useState(1);
+  const [pages,      setPages]      = useState(1);
+  const [total,      setTotal]      = useState(0);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [search,     setSearch]     = useState("");
+  const [expanded,   setExpanded]   = useState(null);
+  const [toast,      setToast]      = useState("");
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  const load = useCallback((p = 1) => {
+    setLoading(true);
+    adminListContactMessages({ page: p, unread_only: unreadOnly ? "true" : "", search })
+      .then(r => {
+        setMsgs(r.data.results || []);
+        setUnread(r.data.unread_count || 0);
+        setTotal(r.data.count || 0);
+        setPages(r.data.pages || 1);
+        setPage(p);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [unreadOnly, search]);
+
+  useEffect(() => { load(1); }, [unreadOnly]);
+
+  const markRead = async (id, replied = false) => {
+    try {
+      await adminMarkContactRead(id, { replied });
+      setMsgs(ms => ms.map(m => m.id === id ? { ...m, is_read: true, replied } : m));
+      setUnread(u => Math.max(0, u - 1));
+      showToast(replied ? "Marked as replied." : "Marked as read.");
+    } catch { showToast("Action failed."); }
+  };
+
+  const deleteMsg = async (id) => {
+    if (!confirm("Delete this message?")) return;
+    try {
+      await adminDeleteContactMessage(id);
+      setMsgs(ms => ms.filter(m => m.id !== id));
+      setTotal(t => t - 1);
+      showToast("Message deleted.");
+      if (expanded === id) setExpanded(null);
+    } catch { showToast("Delete failed."); }
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+        marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <h2 style={{ fontSize:16, fontWeight:800, color:"var(--text-h)" }}>
+            Contact Messages
+          </h2>
+          {unread > 0 && (
+            <span style={{ padding:"2px 10px", borderRadius:20, fontSize:12,
+              fontWeight:700, background:"#DC2626", color:"white" }}>
+              {unread} unread
+            </span>
+          )}
+        </div>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <button onClick={() => setUnreadOnly(u => !u)}
+            style={{ padding:"6px 14px", borderRadius:20, fontSize:12, fontWeight:700,
+              cursor:"pointer", border:"1.5px solid",
+              borderColor: unreadOnly ? "#2563EB" : "var(--border)",
+              background:  unreadOnly ? "#EFF6FF"  : "#fff",
+              color:       unreadOnly ? "#2563EB"  : "var(--text-s)" }}>
+            {unreadOnly ? "Showing Unread" : "Show All"}
+          </button>
+          <span style={{ fontSize:12, color:"var(--text-p)" }}>{total} total</span>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ position:"relative", marginBottom:14, maxWidth:340 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && load(1)}
+          placeholder="Search name, email, subject…"
+          style={{ width:"100%", padding:"8px 12px 8px 34px", borderRadius:8,
+            border:"1.5px solid var(--border)", fontSize:13, outline:"none",
+            boxSizing:"border-box" }}/>
+        <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", display:"flex" }}>
+          <ISearch size={13} color="var(--text-p)"/>
+        </span>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{ padding:"10px 14px", background:"#F0FDF4", border:"1.5px solid #BBF7D0",
+          borderRadius:9, marginBottom:12, fontSize:13, color:"#16A34A", fontWeight:600 }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Messages list */}
+      {loading ? (
+        <div style={{ padding:"48px", textAlign:"center", color:"var(--text-p)", fontSize:13 }}>
+          Loading messages…
+        </div>
+      ) : msgs.length === 0 ? (
+        <div style={{ padding:"56px", textAlign:"center" }}>
+          <IMail size={40} color="var(--text-p)"/>
+          <p style={{ fontSize:14, color:"var(--text-s)", marginTop:10 }}>
+            {unreadOnly ? "No unread messages." : "No contact messages yet."}
+          </p>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {msgs.map(msg => {
+            const exp = expanded === msg.id;
+            return (
+              <div key={msg.id} className="card"
+                style={{ overflow:"hidden", opacity: msg.is_read ? 0.85 : 1,
+                  borderLeft: msg.is_read ? "3px solid var(--border)" : "3px solid #2563EB" }}>
+
+                {/* Header row */}
+                <div style={{ padding:"14px 16px", display:"flex", gap:12,
+                  alignItems:"flex-start", cursor:"pointer" }}
+                  onClick={() => {
+                    setExpanded(exp ? null : msg.id);
+                    if (!msg.is_read) markRead(msg.id);
+                  }}>
+
+                  {/* Avatar initial */}
+                  <div style={{ width:38, height:38, borderRadius:"50%", flexShrink:0,
+                    background: msg.is_read ? "var(--bg-subtle)" : "var(--primary-bg)",
+                    border:`2px solid ${msg.is_read ? "var(--border)" : "var(--primary-bd)"}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:15, fontWeight:800,
+                    color: msg.is_read ? "var(--text-p)" : "var(--primary)" }}>
+                    {msg.name[0]?.toUpperCase() || "?"}
+                  </div>
+
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8,
+                      marginBottom:3, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:14, fontWeight: msg.is_read ? 600 : 800,
+                        color:"var(--text-h)" }}>
+                        {msg.name}
+                      </span>
+                      <span style={{ fontSize:12, color:"var(--text-s)" }}>
+                        {msg.email}
+                      </span>
+                      {!msg.is_read && (
+                        <span style={{ padding:"1px 8px", borderRadius:20, fontSize:11,
+                          fontWeight:700, background:"#2563EB", color:"white" }}>
+                          New
+                        </span>
+                      )}
+                      {msg.replied && (
+                        <span style={{ padding:"1px 8px", borderRadius:20, fontSize:11,
+                          fontWeight:700, background:"#F0FDF4", color:"#16A34A",
+                          border:"1px solid #BBF7D0" }}>
+                          Replied
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize:13, fontWeight:600, color:"var(--text-b)",
+                      marginBottom:2, whiteSpace:"nowrap", overflow:"hidden",
+                      textOverflow:"ellipsis", maxWidth:400 }}>
+                      {msg.subject}
+                    </div>
+                    <div style={{ fontSize:12, color:"var(--text-s)",
+                      whiteSpace:"nowrap", overflow:"hidden",
+                      textOverflow:"ellipsis", maxWidth:400 }}>
+                      {msg.message.slice(0, 80)}{msg.message.length > 80 ? "…" : ""}
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign:"right", flexShrink:0 }}>
+                    <div style={{ fontSize:11, color:"var(--text-p)", marginBottom:4 }}>
+                      {msg.created_at}
+                    </div>
+                    <span style={{ color:"var(--text-p)", fontSize:14 }}>{exp ? "▲" : "▼"}</span>
+                  </div>
+                </div>
+
+                {/* Expanded */}
+                {exp && (
+                  <div style={{ borderTop:"1px solid var(--border)", padding:"16px" }}>
+
+                    {/* Full message */}
+                    <div style={{ background:"var(--bg-subtle)", borderRadius:9,
+                      padding:"14px 16px", marginBottom:16,
+                      border:"1px solid var(--border)" }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:"var(--text-p)",
+                        textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
+                        Full Message
+                      </p>
+                      <p style={{ fontSize:14, color:"var(--text-b)", lineHeight:1.8,
+                        margin:0, whiteSpace:"pre-wrap" }}>
+                        {msg.message}
+                      </p>
+                    </div>
+
+                    {/* Reply instructions */}
+                    <div style={{ background:"#EFF6FF", border:"1px solid #BFDBFE",
+                      borderRadius:9, padding:"12px 14px", marginBottom:14,
+                      fontSize:13, color:"#1D4ED8", lineHeight:1.6 }}>
+                      <strong>To reply:</strong> Send an email to{" "}
+                      <a href={`mailto:${msg.email}?subject=Re: ${encodeURIComponent(msg.subject)}`}
+                        style={{ color:"#1D4ED8", fontWeight:700 }}>
+                        {msg.email}
+                      </a>
+                      {" "}— click the link to open in your email client.
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <a href={`mailto:${msg.email}?subject=Re: ${encodeURIComponent(msg.subject)}`}
+                        style={{ padding:"8px 16px", borderRadius:8, border:"none",
+                          background:"var(--primary)", color:"white",
+                          fontWeight:700, fontSize:13, textDecoration:"none",
+                          display:"flex", alignItems:"center", gap:6 }}
+                        onClick={() => markRead(msg.id, true)}>
+                        <IMail size={13} color="white"/> Reply via Email
+                      </a>
+                      {!msg.replied && (
+                        <button onClick={() => markRead(msg.id, true)}
+                          style={{ padding:"8px 16px", borderRadius:8,
+                            border:"1.5px solid #BBF7D0", background:"#F0FDF4",
+                            color:"#16A34A", fontWeight:700, fontSize:13, cursor:"pointer",
+                            display:"flex", alignItems:"center", gap:6 }}>
+                          <ICheckCirc size={13} color="#16A34A"/> Mark as Replied
+                        </button>
+                      )}
+                      {!msg.is_read && (
+                        <button onClick={() => markRead(msg.id, false)}
+                          style={{ padding:"8px 16px", borderRadius:8,
+                            border:"1.5px solid var(--border)", background:"#fff",
+                            color:"var(--text-s)", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                          Mark as Read
+                        </button>
+                      )}
+                      <button onClick={() => deleteMsg(msg.id)}
+                        style={{ padding:"8px 14px", borderRadius:8,
+                          border:"1.5px solid #FECACA", background:"#FEF2F2",
+                          color:"#DC2626", fontWeight:600, fontSize:13, cursor:"pointer",
+                          display:"flex", alignItems:"center", gap:6, marginLeft:"auto" }}>
+                        <IClose size={13} color="#DC2626"/> Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pages > 1 && (
+        <div style={{ display:"flex", justifyContent:"center", gap:6, marginTop:20 }}>
+          {Array.from({ length: pages }, (_, i) => i + 1).map(p => (
+            <button key={p} onClick={() => load(p)}
+              style={{ padding:"6px 12px", borderRadius:8, border:"1.5px solid",
+                borderColor: p === page ? "var(--primary)" : "var(--border)",
+                background:  p === page ? "var(--primary)" : "#fff",
+                color:       p === page ? "white" : "var(--text-h)",
                 cursor:"pointer", fontSize:13, fontWeight:600 }}>{p}</button>
           ))}
         </div>

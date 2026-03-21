@@ -6,9 +6,10 @@ import {
   submitReview, markBookingComplete,
 } from "../services/api";
 import { ICheckCirc, IAlertCirc, IUser, IStarFill, IRefresh, IClipboard,
-         IMoney, IMessage, ICheck, IClose } from "../components/Icons";
+         IMoney, IMessage, ICheck, IClose, IAlertTri } from "../components/Icons";
 import { BookingCardSkeleton, EmptyState } from "../components/Skeleton";
 import { formatNPR } from "../utils";
+import ComplaintForm from "./ComplaintForm";
 
 function Stars({ rating, size = 14, interactive = false, onRate }) {
   const [hover, setHover] = useState(0);
@@ -137,7 +138,8 @@ export default function MyBookings() {
   // Bargain input state per booking
   const [bargainInputs, setBargainInputs] = useState({}); // {id: {rate, msg}}
   // Review form state per booking
-  const [reviewOpen, setReviewOpen] = useState({}); // {id: bool}
+  const [reviewOpen,    setReviewOpen]    = useState({}); // {id: bool}
+  const [complaintOpen, setComplaintOpen] = useState(null); // booking obj for complaint modal
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { navigate("/login"); return; }

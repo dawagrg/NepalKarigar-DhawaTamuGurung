@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { IWrench, IUser, IChevDown, ILogOut, ISettings, ICalendar, IShield } from "./Icons";
+import { IWrench, IUser, IChevDown, ILogOut, ISettings, ICalendar, IShield, IAlertTri } from "./Icons";
 import NotificationBell from "./NotificationBell";
 import AdminNotificationBell from "./AdminNotificationBell";
 import { getProfile } from "../services/api";
@@ -147,7 +147,7 @@ export default function Navbar() {
         {/* Right side */}
         {user ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <NotificationBell />
+            {!isStaff && <NotificationBell />}
             {isStaff && <AdminNotificationBell />}
             <div ref={dropRef} style={{ position: "relative" }}>
             <button
@@ -173,12 +173,14 @@ export default function Navbar() {
                     <div style={{ fontSize: 11, color: isStaff ? "#D97706" : "var(--primary)", fontWeight: 700, marginTop: 1 }}>{roleLabel}</div>
                   </div>
                 </div>
-                <Link to="/profile" onClick={() => setOpen(false)}
-                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--text-b)", fontSize: 13, fontWeight: 500 }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <ISettings size={14} color="var(--text-s)" /> My Profile
-                </Link>
+                {!isStaff && (
+                  <Link to="/profile" onClick={() => setOpen(false)}
+                    style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--text-b)", fontSize: 13, fontWeight: 500 }}
+                    onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <ISettings size={14} color="var(--text-s)" /> My Profile
+                  </Link>
+                )}
                 {role === "karigar" && (
                   <Link to="/karigar-dashboard" onClick={() => setOpen(false)}
                     style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--text-b)", fontSize: 13, fontWeight: 500 }}
@@ -187,12 +189,22 @@ export default function Navbar() {
                     <IWrench size={14} color="var(--text-s)" /> My Dashboard
                   </Link>
                 )}
-                <Link to="/my-bookings" onClick={() => setOpen(false)}
-                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--text-b)", fontSize: 13, fontWeight: 500 }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <ICalendar size={14} color="var(--text-s)" /> My Bookings
-                </Link>
+                {!isStaff && (
+                  <>
+                    <Link to="/my-bookings" onClick={() => setOpen(false)}
+                      style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--text-b)", fontSize: 13, fontWeight: 500 }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <ICalendar size={14} color="var(--text-s)" /> My Bookings
+                    </Link>
+                    <Link to="/my-complaints" onClick={() => setOpen(false)}
+                      style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px", textDecoration: "none", color: "var(--text-b)", fontSize: 13, fontWeight: 500 }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <IAlertTri size={14} color="var(--text-s)" /> My Complaints
+                    </Link>
+                  </>
+                )}
                 {isStaff && (
                   <>
                     <div style={{ height: 1, background: "#F3F4F6" }} />

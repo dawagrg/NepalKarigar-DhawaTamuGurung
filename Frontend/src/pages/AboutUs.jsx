@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { submitContactMessage } from "../services/api";
 import { Link } from "react-router-dom";
 
 const PRIMARY    = "#2563EB";
@@ -82,12 +83,19 @@ export default function AboutUs() {
     if (!form.name.trim())    { setFormErr("Please enter your name."); return; }
     if (!form.email.trim() || !form.email.includes("@")) { setFormErr("Please enter a valid email."); return; }
     if (!form.subject.trim()) { setFormErr("Please enter a subject."); return; }
-    if (!form.message.trim()) { setFormErr("Please write a message."); return; }
+    if (!form.message.trim() || form.message.trim().length < 10) {
+      setFormErr("Please write a message (at least 10 characters)."); return;
+    }
     setSending(true);
-    // Simulate sending (no real backend for contact form)
-    await new Promise(r => setTimeout(r, 1200));
-    setSending(false);
-    setSent(true);
+    try {
+      await submitContactMessage(form);
+      setSent(true);
+    } catch (err) {
+      const d = err.response?.data;
+      setFormErr(d?.error || "Failed to send message. Please try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const inputStyle = {
@@ -180,7 +188,7 @@ export default function AboutUs() {
             <div style={{ flex:1, minWidth:260 }}>
               <h3 style={{ fontSize:20, fontWeight:800, color:"#111827", marginBottom:12 }}>Our Story</h3>
               <p style={{ fontSize:14, color:"#374151", lineHeight:1.8, marginBottom:12 }}>
-                NepalKarigar started as a second-year university project at <strong>Itahari International College</strong>, affiliated with London Metropolitan University. Our team saw first-hand how difficult it was for families in Sunsari and beyond to find a trustworthy plumber, electrician, or carpenter on short notice.
+                NepalKarigar started as a final-year university project at <strong>Itahari International College</strong>, affiliated with London Metropolitan University. Our team saw first-hand how difficult it was for families in Sunsari and beyond to find a trustworthy plumber, electrician, or carpenter on short notice.
               </p>
               <p style={{ fontSize:14, color:"#374151", lineHeight:1.8 }}>
                 We built a platform where karigars can showcase their skills, set fair rates, negotiate bookings, and build a verified reputation — while customers can browse, compare, and book with confidence.
@@ -204,7 +212,7 @@ export default function AboutUs() {
           <SectionTitle
             eyebrow="The Team"
             title="Meet the Builders"
-            subtitle="Four students who turned a real problem into a working solution."
+            subtitle="Four students who turned a real problem into a working solution. Supervised by Saugat Adhikari."
           />
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:20 }}>
             {TEAM.map(m => (
@@ -221,6 +229,9 @@ export default function AboutUs() {
               </div>
             ))}
           </div>
+          <p style={{ textAlign:"center", fontSize:13, color:"#9CA3AF", marginTop:24 }}>
+            Submitted to: <strong style={{ color:"#374151" }}>Saugat Adhikari</strong> · Itahari International College / London Metropolitan University
+          </p>
         </Section>
 
         {/* ── Stats ────────────────────────────────────────────────────────── */}
@@ -390,7 +401,7 @@ export default function AboutUs() {
             <a href="#contact"  style={{ fontSize:12, color:PRIMARY,   textDecoration:"none", fontWeight:600 }}>Contact</a>
           </div>
           <p style={{ fontSize:11, color:"#D1D5DB", marginTop:14 }}>
-            © 2025 NepalKarigar 
+            © 2024 NepalKarigar · Itahari International College · London Metropolitan University
           </p>
         </div>
 

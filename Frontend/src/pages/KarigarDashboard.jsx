@@ -386,8 +386,7 @@ export default function KarigarDashboard() {
                       <button onClick={() => deleteGal(img.id)}
                         style={{ position:"absolute",top:4,right:4,width:22,height:22,borderRadius:"50%",
                           background:"rgba(220,38,38,.85)",border:"none",color:"white",cursor:"pointer",
-                          fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",
-                          display:"flex",alignItems:"center",justifyContent:"center" }}><IClose size={12} color="white"/></button>
+                          fontSize:13,display:"flex",alignItems:"center",justifyContent:"center" }}><IClose size={12} color="white"/></button>
                     </div>
                   ))}
                 </div>

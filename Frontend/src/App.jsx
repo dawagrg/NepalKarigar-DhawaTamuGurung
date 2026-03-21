@@ -16,6 +16,7 @@ import AdminDashboard   from "./pages/AdminDashboard";
 import AboutUs          from "./pages/AboutUs";
 import NotFound                from "./pages/NotFound";
 import KarigarApplicationForm   from "./pages/KarigarApplicationForm";
+import MyComplaints              from "./pages/MyComplaints";
 
 const W = ({ children }) => <><Navbar />{children}</>;
 
@@ -34,6 +35,7 @@ function App() {
         <Route path="/admin-dashboard"   element={<W><AdminDashboard /></W>} />
         <Route path="/about"             element={<W><AboutUs /></W>} />
         <Route path="/karigar-apply"      element={<KarigarApplicationForm />} />
+        <Route path="/my-complaints"      element={<W><MyComplaints /></W>} />
         <Route path="*"                  element={<NotFound />} />
         <Route path="/login"             element={<Login />} />
         <Route path="/register"          element={<Register />} />

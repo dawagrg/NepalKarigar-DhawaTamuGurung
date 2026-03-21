@@ -132,7 +132,7 @@ export default function AdminNotificationBell() {
               </button>
               {notifs.some(n=>n.is_read) && (
                 <button onClick={handleClear} title="Clear read"
-                  style={{ background:"none", border:"none", cursor:"pointer",
+                  style={{ background:"none", cursor:"pointer",
                     padding:"2px 8px", borderRadius:5, fontSize:11, fontWeight:600,
                     color:"var(--text-p)", border:"1px solid var(--border)" }}>
                   Clear read

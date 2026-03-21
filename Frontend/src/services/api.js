@@ -155,6 +155,12 @@ export const adminListApplications     = (params) => API.get("admin/applications
 export const adminApproveApplication   = (id, data) => API.post(`admin/applications/${id}/approve/`, data);
 export const adminRejectApplication    = (id, data) => API.post(`admin/applications/${id}/reject/`, data);
 
+// ── Contact Messages ─────────────────────────────────────────────────────────
+export const submitContactMessage      = (data)   => API.post("contact/", data);
+export const adminListContactMessages  = (params)  => API.get("admin/contact-messages/", { params });
+export const adminMarkContactRead      = (id,data) => API.post(`admin/contact-messages/${id}/read/`, data||{});
+export const adminDeleteContactMessage = (id)      => API.delete(`admin/contact-messages/${id}/delete/`);
+
 // ── Complaints ───────────────────────────────────────────────────────────────
 export const submitComplaint       = (data)   => API.post("complaints/", data, {
   headers: { "Content-Type": "multipart/form-data" },
